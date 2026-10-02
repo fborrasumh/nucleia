@@ -1,0 +1,1511 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0F2237">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data: blob:; connect-src https://api.openai.com; base-uri 'none'; form-action 'none'">
+<meta name="author" content="Augusto Escalante Rodríguez; Fernando Borrás Rocher">
+<meta name="description" content="NucleIA: recuento de núcleos en microscopía de fluorescencia en el navegador, determinista y con revisión manual. Realizada entre Augusto Escalante Rodríguez (Instituto de Neurociencias, CSIC–UMH) y Fernando Borrás Rocher (Universidad Miguel Hernández de Elche).">
+<title>NucleIA · Recuento de núcleos en fluorescencia</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --tinta:#0F2237; --acero:#2E4B6B; --acero-claro:#7C93AC; --gris:#5D7691;
+  --papel:#F3F6FA; --blanco:#FFFFFF; --linea:#D8E0E9; --linea-2:#E8EEF4;
+  --brasa:#E4572E; --brasa-osc:#C9441F; --brasa-suave:#FDEBE4;
+  --forjado:#0E7C6B; --forjado-suave:#E0F3EE; --aviso:#8A3617;
+  --c-ctx:#1F6FB2; --c-comp:#6B4FD8; --c-rda:#0E8C7A; --c-tema:#C98200; --c-eval:#E4572E; --c-final:#2E4B6B;
+  --sombra:0 1px 0 rgba(15,34,55,.05), 0 14px 34px -22px rgba(15,34,55,.45);
+  --sombra-alta:0 2px 0 rgba(15,34,55,.04), 0 22px 50px -24px rgba(15,34,55,.55);
+  --r:14px;
+  --display:"Bricolage Grotesque",Georgia,serif;
+  --texto:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--papel);color:var(--tinta);font-family:var(--texto);font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased;padding-bottom:84px}
+a{color:var(--acero)}
+:focus-visible{outline:3px solid var(--brasa);outline-offset:2px;border-radius:6px}
+.hidden{display:none!important}
+svg.i{width:1.15em;height:1.15em;vertical-align:-.2em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+code{font-family:var(--mono);font-size:.85em;background:var(--linea-2);padding:1px 5px;border-radius:5px}
+
+/* Barra superior */
+.topbar{position:sticky;top:0;z-index:40;background:var(--tinta);color:#EAF1F7;box-shadow:0 6px 24px -14px rgba(0,0,0,.6)}
+.tb-in{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:14px}
+.logo{background:none;border:0;color:#fff;font-family:var(--display);font-weight:800;font-size:24px;letter-spacing:-.03em;cursor:pointer;padding:2px 4px;display:flex;align-items:center;gap:8px}
+.logo em{font-style:normal;color:var(--brasa)}
+.logo .anv{width:30px;height:30px;border-radius:9px;background:var(--brasa);display:grid;place-items:center;color:#fff}
+.stepper{flex:1;display:flex;align-items:center;justify-content:center;min-width:0}
+.sdot{display:flex;align-items:center;gap:7px;background:none;border:0;color:#8FA7BE;font:600 13px var(--texto);padding:6px;cursor:pointer;border-radius:10px;white-space:nowrap}
+.sdot:disabled{cursor:not-allowed;opacity:.45}
+.sdot .n{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;border:2px solid #3E5C7D;font-size:12px;color:#A9C0D4;transition:all .2s}
+.sdot .n svg{width:14px;height:14px}
+.sdot[data-state="done"] .n{background:var(--forjado);border-color:var(--forjado);color:#fff}
+.sdot[data-state="now"]{color:#fff}
+.sdot[data-state="now"] .n{background:var(--brasa);border-color:var(--brasa);color:#fff;box-shadow:0 0 0 4px rgba(228,87,46,.25)}
+.sdot:not(:disabled):hover{background:rgba(255,255,255,.06)}
+.sline{flex:0 1 26px;height:2px;background:#2F4A68;min-width:6px}
+.sline.on{background:var(--forjado)}
+.tb-tools{display:flex;gap:6px}
+.tb-btn{background:transparent;border:1px solid #3E5C7D;color:#C9D8E6;border-radius:9px;padding:6px 10px;font:600 13px var(--texto);cursor:pointer;display:flex;align-items:center;gap:6px}
+.tb-btn:hover{border-color:var(--brasa);color:#fff}
+.progress{height:4px;background:#1E3550}
+.progress span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--brasa),#F59E0B);transition:width .4s}
+@media(max-width:960px){.sdot .lbl{display:none}.sdot[data-state="now"] .lbl{display:inline}}
+@media(max-width:720px){
+  .tb-in{flex-wrap:wrap;gap:8px}
+  .stepper{order:3;flex-basis:100%;justify-content:space-between}
+  .sdot[data-state="now"] .lbl{display:none}
+  .tb-btn .lbl{display:none}
+}
+
+/* Pantallas */
+main{max-width:1180px;margin:0 auto;padding:26px 16px 40px}
+.screen{display:none}
+.screen.on{display:block}
+@media(prefers-reduced-motion:no-preference){.screen.on{animation:rise .35s cubic-bezier(.2,.7,.3,1) both}@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}}
+.sh{display:flex;gap:18px;align-items:flex-start;margin:4px 0 22px}
+.sh-ico{width:64px;height:64px;border-radius:18px;background:var(--c,var(--brasa));color:#fff;display:grid;place-items:center;flex:none;box-shadow:0 12px 24px -14px var(--c,var(--brasa))}
+.sh-ico svg{width:32px;height:32px}
+.sh-step{font:600 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--acero-claro);margin:4px 0}
+.sh h2{font-family:var(--display);font-weight:800;font-size:clamp(26px,3.6vw,38px);letter-spacing:-.025em;line-height:1.05;margin:0 0 6px}
+.sh-lede{margin:0;color:var(--gris);font-size:16.5px;max-width:70ch}
+@media(max-width:600px){.sh-ico{width:48px;height:48px;border-radius:14px}.sh-ico svg{width:24px;height:24px}}
+
+.card{background:var(--blanco);border:1px solid var(--linea);border-radius:var(--r);box-shadow:var(--sombra);padding:20px;margin-bottom:18px}
+.card h3{font-family:var(--display);font-weight:700;font-size:19px;letter-spacing:-.01em;margin:0 0 4px;display:flex;align-items:center;gap:9px}
+.card h3 .num{width:26px;height:26px;border-radius:8px;background:var(--tinta);color:#fff;font:700 13px var(--mono);display:grid;place-items:center}
+.card .sub{margin:0 0 14px;color:var(--gris);font-size:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.cols{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:20px;align-items:start}
+.sticky{position:sticky;top:96px}
+@media(max-width:900px){.cols{grid-template-columns:1fr}.sticky{position:static}}
+@media(max-width:640px){.grid2{grid-template-columns:1fr}}
+
+label,.lab{display:block;font-size:13.5px;font-weight:600;margin:0 0 6px;color:var(--acero)}
+label small,.lab small{font-weight:500;color:var(--acero-claro)}
+input[type=text],input[type=password],input[type=number],textarea,select{width:100%;padding:11px 13px;border:1.5px solid var(--linea);border-radius:10px;font-family:var(--texto);font-size:15px;color:var(--tinta);background:#fff;transition:border-color .15s,box-shadow .15s}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--acero-claro);box-shadow:0 0 0 4px rgba(124,147,172,.18)}
+input.bad{border-color:var(--brasa);box-shadow:0 0 0 4px rgba(228,87,46,.15)}
+textarea{resize:vertical;min-height:96px;line-height:1.5}
+input::placeholder,textarea::placeholder{color:#9DB0C2}
+.field{margin-bottom:16px}
+.help{font-size:12.8px;color:var(--gris);margin:6px 0 0}
+.help b{color:var(--acero)}
+
+button{font-family:var(--texto);cursor:pointer}
+.btn{display:inline-flex;align-items:center;gap:8px;border-radius:11px;font-weight:600;font-size:15px;border:1.5px solid transparent;padding:11px 18px;transition:transform .08s,background .15s,border-color .15s;text-decoration:none;line-height:1.2}
+.btn:active{transform:translateY(1px)}
+.btn-primary{background:var(--brasa);color:#fff;box-shadow:0 8px 18px -10px var(--brasa)}
+.btn-primary:hover{background:var(--brasa-osc)}
+.btn-big{font-size:17px;padding:14px 24px;border-radius:13px}
+.btn-dark{background:var(--tinta);color:#fff}
+.btn-dark:hover{background:#1c3656}
+.btn-ghost{background:#fff;border-color:var(--linea);color:var(--acero)}
+.btn-ghost:hover{border-color:var(--acero-claro);background:#F7FAFC}
+.btn-ok{background:var(--forjado);color:#fff}
+.btn-ok:hover{background:#0b6457}
+.btn-word{background:#2B579A;color:#fff}
+.btn-word:hover{background:#1e3f7a}
+.btn-sm{padding:7px 12px;font-size:13.5px;border-radius:9px}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{background:#fff;border:1.5px solid var(--linea);border-radius:999px;padding:7px 13px;font-size:13.5px;color:var(--acero);cursor:pointer;display:inline-flex;align-items:center;gap:6px;line-height:1.25;text-align:left}
+.chip:hover{border-color:var(--brasa);color:var(--brasa)}
+.chip[aria-pressed="true"]{background:var(--tinta);border-color:var(--tinta);color:#fff}
+.chip.mini-ex{font-size:12.5px;padding:4px 10px;border-style:dashed}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{border:1.5px solid var(--linea);background:#fff;border-radius:9px;padding:7px 11px;font-size:13.5px;font-weight:600;color:var(--acero)}
+.seg button:hover{border-color:var(--acero-claro)}
+.seg button[aria-pressed="true"]{background:var(--tinta);border-color:var(--tinta);color:#fff}
+
+.meto{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+.meto button{text-align:left;background:#fff;border:1.5px solid var(--linea);border-radius:12px;padding:10px 12px;color:var(--tinta)}
+.meto button b{display:block;font-size:14px}
+.meto button span{display:block;font-size:12.3px;color:var(--gris);line-height:1.35;margin-top:2px}
+.meto button:hover{border-color:var(--acero-claro)}
+.meto button[aria-pressed="true"]{border-color:var(--tinta);box-shadow:0 0 0 2px var(--tinta);background:var(--papel)}
+
+.tip{display:flex;gap:12px;background:#FFF8E6;border:1px solid #F3DDA0;border-radius:12px;padding:13px 15px;font-size:14px;color:#6B4E00;margin-bottom:18px}
+.tip svg{width:22px;height:22px;color:#C98200;flex:none;margin-top:1px}
+.tip strong{color:#523B00}
+.aviso{background:var(--brasa-suave);border:1px solid #F3C7B5;border-radius:12px;padding:13px 15px;font-size:14px;color:var(--aviso);margin-bottom:16px}
+.okbox{background:var(--forjado-suave);border:1px solid #A9DCCF;border-radius:12px;padding:13px 15px;font-size:14px;color:#0B5A4E;margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+
+/* Inicio */
+.hero{background:var(--tinta);color:#EAF1F7;border-radius:22px;padding:40px 36px;position:relative;overflow:hidden;margin-bottom:26px;box-shadow:var(--sombra-alta)}
+.hero::before{content:"";position:absolute;right:-80px;top:-80px;width:360px;height:360px;border-radius:50%;background:radial-gradient(circle,rgba(228,87,46,.55),transparent 65%)}
+.hero::after{content:"";position:absolute;left:30%;bottom:-140px;width:420px;height:280px;border-radius:50%;background:radial-gradient(circle,rgba(14,140,122,.35),transparent 65%)}
+.hero>*{position:relative;z-index:1}
+@media(max-width:600px){.hero{padding:28px 20px;border-radius:18px}}
+.eyebrow{font:600 11.5px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:#8FA7BE;margin:0 0 14px}
+.hero h1{font-family:var(--display);font-weight:800;font-size:clamp(34px,5.4vw,58px);line-height:.98;letter-spacing:-.035em;margin:0 0 16px;max-width:17ch}
+.hero h1 em{font-style:normal;color:var(--brasa)}
+.hero p.lede{max-width:62ch;font-size:18px;color:#C3D3E2;margin:0 0 24px}
+.hero .actions .btn-ghost{background:transparent;color:#fff;border-color:#4A6787}
+.hero .actions .btn-ghost:hover{border-color:#fff}
+.draft{margin-top:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:12px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:14.5px}
+.sec-title{font-family:var(--display);font-weight:800;font-size:24px;letter-spacing:-.02em;margin:34px 0 6px}
+.sec-sub{color:var(--gris);margin:0 0 16px}
+.journey{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.jstop{background:#fff;border:1px solid var(--linea);border-radius:14px;padding:16px;position:relative}
+.jstop .ji{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:#fff;background:var(--c);margin-bottom:10px}
+.jstop .ji svg{width:20px;height:20px}
+.jstop b{display:block;font-size:15px;margin-bottom:2px}
+.jstop span{display:block;font-size:13px;color:var(--gris);line-height:1.45}
+.jstop .jn{position:absolute;top:12px;right:14px;font:700 12px var(--mono);color:var(--acero-claro)}
+@media(max-width:900px){.journey{grid-template-columns:1fr 1fr}}
+@media(max-width:480px){.journey{grid-template-columns:1fr}}
+
+.parts{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.part{display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid var(--linea);border-radius:12px;padding:12px 14px}
+.part .pi{width:34px;height:34px;border-radius:10px;background:color-mix(in srgb,var(--c) 14%,#fff);color:var(--c);display:grid;place-items:center;flex:none}
+.part b{display:block;font-size:14.5px}
+.part span{display:block;font-size:12.8px;color:var(--gris);line-height:1.4}
+
+.examples{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.excard{background:#fff;border:1px solid var(--linea);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--sombra);position:relative;overflow:hidden;text-align:left;font:inherit;color:inherit;cursor:pointer;transition:transform .15s,box-shadow .15s}
+.excard:hover{transform:translateY(-3px);box-shadow:var(--sombra-alta)}
+.excard::before{content:"";position:absolute;left:0;top:0;right:0;height:5px;background:var(--c)}
+.excard .emo{font-size:32px;line-height:1}
+.excard .area{font:700 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--acero-claro)}
+.excard b{font-family:var(--display);font-size:18px;letter-spacing:-.01em;line-height:1.15}
+.excard p{margin:0;font-size:13.5px;color:var(--gris);flex:1}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:var(--c);background:color-mix(in srgb,var(--c) 12%,#fff);border-radius:999px;padding:3px 9px;align-self:flex-start}
+
+/* Clave */
+.keyrow{display:flex;gap:8px}
+.keyrow input{flex:1;font-family:var(--mono);font-size:14px}
+.eye{width:46px;flex:none;border:1.5px solid var(--linea);background:#fff;border-radius:10px;color:var(--acero);display:grid;place-items:center}
+.light{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:var(--papel);margin-top:14px;font-size:14.5px;font-weight:600}
+.light .bulbo{width:14px;height:14px;border-radius:50%;background:#B8C5D3;box-shadow:0 0 0 4px rgba(184,197,211,.3);flex:none}
+.light[data-s="ok"] .bulbo{background:#16A34A;box-shadow:0 0 0 4px rgba(22,163,74,.22)}
+.light[data-s="err"] .bulbo{background:var(--brasa);box-shadow:0 0 0 4px rgba(228,87,46,.22)}
+.light[data-s="wait"] .bulbo{background:#F59E0B;box-shadow:0 0 0 4px rgba(245,158,11,.25)}
+.olsteps{list-style:none;padding:0;margin:0;counter-reset:o;display:flex;flex-direction:column;gap:12px}
+.olsteps li{counter-increment:o;display:flex;gap:12px;font-size:14.5px;align-items:flex-start}
+.olsteps li::before{content:counter(o);width:28px;height:28px;border-radius:50%;background:var(--brasa-suave);color:var(--brasa);font:700 13px var(--mono);display:grid;place-items:center;flex:none}
+
+/* Acordeones */
+.acc{background:#fff;border:1px solid var(--linea);border-radius:var(--r);margin-bottom:12px;box-shadow:var(--sombra);overflow:hidden}
+.acc>summary{list-style:none;cursor:pointer;padding:15px 18px;display:flex;align-items:center;gap:12px}
+.acc>summary::-webkit-details-marker{display:none}
+.acc>summary .ai{width:36px;height:36px;border-radius:10px;background:var(--papel);color:var(--acero);display:grid;place-items:center;flex:none}
+.acc[open]>summary .ai{background:var(--tinta);color:#fff}
+.acc>summary b{font-family:var(--display);font-size:17px;display:block}
+.acc>summary small{display:block;color:var(--gris);font-size:13px}
+.acc>summary .chev{margin-left:auto;transition:transform .2s;color:var(--acero-claro)}
+.acc[open]>summary .chev{transform:rotate(180deg)}
+.acc .inner{padding:4px 18px 18px;border-top:1px solid var(--linea-2)}
+.acc .inner>*:first-child{margin-top:14px}
+.prompt-ta{font-family:var(--mono);font-size:12.3px;min-height:130px;background:#FBFDFE}
+
+/* Resumen lateral */
+.sum h3{margin-bottom:10px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.stat{background:var(--papel);border-radius:12px;padding:10px 12px}
+.stat b{display:block;font:800 24px var(--display);letter-spacing:-.02em;line-height:1.1}
+.stat span{font-size:12.3px;color:var(--gris)}
+.checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.checks li{display:flex;gap:9px;align-items:center;color:var(--gris)}
+.checks li .ck{width:20px;height:20px;border-radius:50%;border:2px solid var(--linea);display:grid;place-items:center;flex:none}
+.checks li.on{color:var(--tinta)}
+.checks li.on .ck{background:var(--forjado);border-color:var(--forjado);color:#fff}
+.checks li .ck svg{width:12px;height:12px}
+.docname{margin-top:14px;padding:11px 13px;border-radius:11px;background:var(--tinta);color:#C3D3E2;font-size:13.5px}
+.docname b{color:#fff}
+
+/* Generación */
+.agents{display:flex;flex-direction:column;gap:10px}
+.agent{background:#fff;border:1px solid var(--linea);border-radius:var(--r);box-shadow:var(--sombra);overflow:hidden;transition:border-color .2s}
+.agent-h{display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer}
+.agent .ai{width:42px;height:42px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,#fff);color:var(--c);display:grid;place-items:center;flex:none;transition:all .2s}
+.agent .ai svg{width:20px;height:20px}
+.agent-t{flex:1;min-width:0}
+.agent-t b{display:block;font-family:var(--display);font-size:16.5px}
+.agent-t span{display:block;font-size:13px;color:var(--gris)}
+.pill{font-size:12.5px;font-weight:700;border-radius:999px;padding:4px 10px;background:var(--linea-2);color:var(--gris);white-space:nowrap}
+.agent[data-s="run"]{border-color:#F59E0B}
+.agent[data-s="run"] .ai{background:var(--c);color:#fff;animation:pulse 1s infinite alternate}
+.agent[data-s="run"] .pill{background:#FFF1D6;color:#8A5A00}
+.agent[data-s="ok"] .ai{background:var(--c);color:#fff}
+.agent[data-s="ok"] .pill{background:var(--forjado-suave);color:var(--forjado)}
+.agent[data-s="err"]{border-color:var(--brasa)}
+.agent[data-s="err"] .pill{background:var(--brasa-suave);color:var(--brasa)}
+.agent-b{display:none;padding:4px 18px 16px 72px;font-size:14px;border-top:1px solid var(--linea-2);background:#FBFDFE}
+.agent.open .agent-b{display:block}
+@media(max-width:600px){.agent-b{padding-left:18px}}
+@keyframes pulse{from{transform:scale(1);box-shadow:0 0 0 0 rgba(228,87,46,.5)}to{transform:scale(1.06);box-shadow:0 0 0 10px rgba(228,87,46,0)}}
+.forging{display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:14px;background:var(--tinta);color:#fff;margin-bottom:16px}
+.forging .spark{width:44px;height:44px;border-radius:12px;background:var(--brasa);display:grid;place-items:center;flex:none;animation:pulse 1s infinite alternate}
+.forging.done .spark{background:var(--forjado);animation:none}
+.forging.err .spark{animation:none}
+.forging b{font-family:var(--display);font-size:18px;display:block}
+.forging span{font-size:14px;color:#C3D3E2}
+.mini-list{margin:10px 0 0;padding:0;list-style:none}
+.mini-list li{padding:5px 0;border-bottom:1px solid var(--linea-2)}
+.mini-list li:last-child{border-bottom:0}
+.code{display:inline-block;font:700 11px var(--mono);border-radius:5px;padding:1px 6px;margin-right:6px;background:var(--linea-2);color:var(--acero)}
+
+/* Guía */
+.res-head{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.res-head h2{font-family:var(--display);font-weight:800;font-size:clamp(24px,3vw,32px);letter-spacing:-.02em;margin:0;flex:1;min-width:240px;line-height:1.1}
+.doc{background:#fff;border:1px solid var(--linea);border-radius:18px;box-shadow:var(--sombra-alta);padding:40px 44px;max-width:900px;margin:0 auto}
+@media(max-width:700px){.doc{padding:22px 16px}}
+.doc-h{border-bottom:3px solid var(--tinta);padding-bottom:18px;margin-bottom:26px}
+.doc-kind{font:600 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--brasa);margin:0 0 6px}
+.doc-h h1{font-family:var(--display);font-weight:800;font-size:clamp(26px,3.4vw,36px);letter-spacing:-.025em;line-height:1.05;margin:0 0 12px}
+.meta{display:flex;flex-wrap:wrap;gap:6px}
+.meta span{font-size:12.8px;font-weight:600;background:var(--papel);color:var(--acero);border-radius:999px;padding:4px 11px}
+.dsec{margin-bottom:28px}
+.dsec h2{font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:-.01em;margin:0 0 10px;display:flex;align-items:center;gap:10px}
+.dsec h2 .num{width:28px;height:28px;border-radius:8px;background:var(--tinta);color:#fff;font:700 13px var(--mono);display:grid;place-items:center;flex:none}
+.dsec p{margin:0 0 10px;max-width:75ch}
+.sublab{font-size:13px;font-weight:700;color:var(--acero-claro);margin:14px 0 6px}
+.row{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--linea-2);font-size:14.5px;align-items:flex-start}
+.row:last-child{border-bottom:0}
+.row .code{margin-top:2px;flex:none}
+.code.cg{background:#E6F0FA;color:var(--c-ctx)}
+.code.ce{background:#EEEAFB;color:var(--c-comp)}
+.code.bl{background:var(--forjado-suave);color:var(--forjado)}
+.code.tm{background:var(--tinta);color:#fff}
+.row .hrs{margin-left:auto;font-size:12.5px;color:var(--gris);white-space:nowrap}
+.blk{font-weight:700;margin:16px 0 4px;display:flex;gap:8px;align-items:baseline}
+.blk small{font-weight:500;color:var(--gris)}
+.tbl-wrap{overflow-x:auto}
+table.t{width:100%;border-collapse:collapse;font-size:14px}
+table.t th{background:var(--tinta);color:#fff;text-align:left;padding:9px 11px;font-size:12.5px;font-weight:700}
+table.t td{padding:9px 11px;border-bottom:1px solid var(--linea-2);vertical-align:top}
+table.t tr:nth-child(even) td{background:#FAFCFE}
+.peso{font-weight:800;color:var(--brasa);white-space:nowrap}
+.note{margin-top:12px;padding:11px 14px;background:var(--papel);border-left:4px solid var(--forjado);border-radius:8px;font-size:14px}
+.demo-flag{background:#FFF8E6;border:1px solid #F3DDA0;color:#6B4E00;border-radius:12px;padding:11px 15px;font-size:14px;margin:0 auto 16px;max-width:900px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.demo-flag svg{color:#C98200}
+
+/* Navegación inferior */
+.bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:35;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--linea)}
+.bn-in{max-width:1180px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
+.bn-hint{flex:1;text-align:center;font-size:14px;color:var(--gris)}
+.bn-hint b{color:var(--tinta)}
+@media(max-width:600px){.bn-hint{display:none}.bn-in{justify-content:space-between}}
+
+/* Modal */
+.modal{position:fixed;inset:0;z-index:60;background:rgba(15,34,55,.55);display:none;align-items:flex-start;justify-content:center;padding:6vh 16px;overflow:auto}
+.modal.on{display:flex}
+.modal-box{background:#fff;border-radius:18px;max-width:760px;width:100%;box-shadow:var(--sombra-alta);overflow:hidden}
+.modal-head{display:flex;align-items:center;gap:12px;padding:16px 20px;background:var(--tinta);color:#fff}
+.modal-head h2{font-family:var(--display);font-size:22px;margin:0;flex:1}
+.modal-head button{background:transparent;border:1px solid #4A6787;color:#fff;border-radius:9px;padding:6px 10px}
+.modal-body{padding:18px 20px 22px}
+.glos{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:600px){.glos{grid-template-columns:1fr}}
+.glos div{background:var(--papel);border-radius:12px;padding:12px 14px}
+.glos b{display:block;font-family:var(--display);font-size:16px;margin-bottom:2px}
+.glos span{font-size:13.8px;color:var(--acero)}
+.hist{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--linea);border-radius:12px;margin-bottom:8px}
+.hist-t{flex:1;min-width:0;cursor:pointer}
+.hist-t b{display:block;font-size:15px}
+.hist-t span{font-size:12.8px;color:var(--gris)}
+.hist:hover{border-color:var(--acero-claro)}
+.iconbtn{width:34px;height:34px;border-radius:9px;border:1.5px solid var(--linea);background:#fff;color:var(--acero);display:grid;place-items:center;padding:0}
+.iconbtn:hover{border-color:var(--brasa);color:var(--brasa)}
+.empty{text-align:center;color:var(--gris);padding:30px 10px}
+
+.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%) translateY(20px);background:var(--tinta);color:#fff;padding:11px 18px;border-radius:12px;font-size:14.5px;font-weight:600;opacity:0;pointer-events:none;transition:all .25s;z-index:70;max-width:90vw;text-align:center;box-shadow:var(--sombra-alta)}
+.toast.on{opacity:1;transform:translateX(-50%)}
+footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;font-size:13px;color:#6E8299}
+footer hr{border:0;border-top:1px solid var(--linea);margin:0 0 14px}
+
+@media print{
+  body{background:#fff;padding:0}
+  .topbar,.bottomnav,.res-head,.demo-flag,.okbox,footer,.toast,.modal{display:none!important}
+  main{padding:0;max-width:none}
+  .screen{display:none!important}
+  
+  .doc{box-shadow:none;border:0;padding:0;max-width:none}
+  .dsec{break-inside:avoid-page}
+  table.t th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+/* ══ v2 ══ */
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:640px){.grid3{grid-template-columns:1fr}}
+.feats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:960px){.feats{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.feats{grid-template-columns:1fr}}
+.feat{background:#fff;border:1px solid var(--linea);border-radius:14px;padding:16px;border-top:4px solid var(--c)}
+.feat .pi{width:38px;height:38px;border-radius:11px;background:color-mix(in srgb,var(--c) 14%,#fff);color:var(--c);display:grid;place-items:center;margin-bottom:10px}
+.feat b{display:block;font-family:var(--display);font-size:17px;margin-bottom:3px}
+.feat span{display:block;font-size:13.5px;color:var(--gris);line-height:1.45}
+.importbar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:var(--tinta);color:#EAF1F7;border-radius:var(--r);padding:14px 16px;margin-bottom:18px}
+.importbar .pi{width:40px;height:40px;border-radius:11px;background:var(--brasa);display:grid;place-items:center;flex:none}
+.importbar b{display:block;font-size:15px}
+.importbar span{display:block;font-size:13.3px;color:#A9C0D4}
+.importbar .btn-dark{background:#fff;color:var(--tinta)}
+.importbar .btn-dark:hover{background:#EAF1F7}
+.inacc{border-top:1px solid var(--linea-2);margin-top:4px;padding-top:12px}
+.inacc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--acero)}
+.inacc>summary::-webkit-details-marker{display:none}
+.inacc>summary .chev{margin-left:auto;transition:transform .2s;color:var(--acero-claro)}
+.inacc[open]>summary .chev{transform:rotate(180deg)}
+.rec{display:inline-block;font:700 11px var(--texto);background:var(--forjado-suave);color:var(--forjado);border-radius:999px;padding:2px 8px;vertical-align:2px;margin-left:4px}
+.checkgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media(max-width:560px){.checkgrid{grid-template-columns:1fr}}
+.checkgrid label{display:flex;gap:9px;align-items:center;margin:0;padding:9px 11px;border-radius:10px;background:var(--papel);font-weight:500;color:var(--tinta);cursor:pointer;font-size:14px}
+.checkgrid input{width:18px;height:18px;accent-color:var(--forjado);margin:0}
+.checkgrid label:has(input:checked){background:var(--forjado-suave)}
+.drop{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;border:2px dashed var(--linea);border-radius:14px;padding:24px;cursor:pointer;color:var(--acero);margin:0;font-weight:500}
+.drop svg{width:30px;height:30px;color:var(--brasa)}
+.drop b{font-size:15px;color:var(--tinta)}
+.drop span{font-size:13px;color:var(--gris)}
+.drop.over,.drop:hover{border-color:var(--brasa);background:var(--brasa-suave)}
+
+
+/* ══ NucleIA ══ */
+.logo .anv{background:linear-gradient(135deg,#2A40B8,#0E8C7A)}
+.hero{padding:44px 38px 30px;position:relative;overflow:hidden}.hero h1{max-width:21ch}.hero>*:not(.nu-art){position:relative;z-index:1}
+.nu-art{position:absolute!important;right:-10px;top:30px;width:min(46%,520px);opacity:.82;pointer-events:none;z-index:0!important}
+@media(max-width:900px){.nu-art{display:none}}
+.nu-formatos{margin:14px 0 0;font-size:13.5px;color:#9DB6CD;max-width:62ch}
+.nu-autores{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,255,255,.14)}.nu-autores-cap{font:600 11px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:#8FA7BE;width:100%;margin-bottom:-4px}
+.nu-autor{display:flex;gap:11px;align-items:center}.nu-autor b{display:block;color:#fff;font:700 16px var(--display)}.nu-autor small{display:block;color:#9DB6CD;font-size:12.5px;max-width:34ch}.nu-av{width:44px;height:44px;border-radius:14px;background:var(--c);color:#fff;display:grid;place-items:center;font:800 15px var(--display);flex:none;box-shadow:0 10px 20px -12px var(--c)}.nu-x{font:300 26px var(--display);color:#5D7C9B}
+.nu-orcid{display:block;margin-top:2px;font:600 11.5px var(--mono);letter-spacing:.02em;color:#7FD6C4!important;text-decoration:none}.nu-orcid:hover{text-decoration:underline}
+.nu-strip{display:flex;gap:8px;align-items:center;justify-content:center;padding:5px 12px;background:#0B1C2E;color:#B8CADB;font-size:12.5px;border-top:1px solid rgba(255,255,255,.06)}.nu-strip .dot{width:9px;height:9px;border-radius:50%;background:#3ddc97;flex:none}.nu-strip.sent .dot{background:#ffb83d}
+.zonas{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:760px){.zonas{grid-template-columns:1fr}}.zona{border-radius:16px;padding:14px 16px;border:2px solid}.zona.l{border-color:#9FD9C4;background:var(--forjado-suave)}.zona.n{border-color:#E9C46A;background:#FFF8E6}.zona h4{margin:0 0 6px;font-family:var(--display);font-size:18px}.zona ul{margin:0;padding-left:18px;font-size:14px;line-height:1.7}
+.sec-title+.zonas,.sec-title+.journey{margin-top:14px}
+.card .actions{margin-top:12px}.card h3{margin-top:0}
+/* área de trabajo */
+.nu-app{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:18px;align-items:start}@media(max-width:980px){.nu-app{grid-template-columns:minmax(0,1fr)}}.nu-app>*{min-width:0}
+.nu-toolbar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding:12px 14px;margin-bottom:12px}.nu-tg{display:flex;gap:8px;align-items:center}
+.tb-label{font-size:13px;color:var(--gris);font-weight:600}
+.seg{display:inline-flex;border:1.5px solid var(--linea);border-radius:10px;overflow:hidden;background:#fff}.seg button{border:0;background:transparent;padding:7px 12px;cursor:pointer;border-right:1px solid var(--linea);font:600 13px var(--texto);color:var(--acero)}.seg button:last-child{border-right:0}.seg button[aria-pressed="true"]{background:var(--tinta);color:#fff}
+.chk{display:inline-flex;gap:6px;align-items:center;font-size:13.5px;cursor:pointer}
+.stage{position:relative;background:#0a0f1d;border-radius:16px;min-height:340px;max-height:72vh;overflow:auto;border:1px solid #1b2440}
+.wrap{position:relative;display:none;margin:0 auto}.wrap canvas{display:block}#cOver{position:absolute;left:0;top:0;cursor:pointer}
+.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-height:340px;padding:24px;text-align:center;color:#c8d0e6;border:2px dashed #34406a;border-radius:14px;margin:10px}.drop.over{border-color:#8ea2ff;background:#10183010}.drop svg{width:34px;height:34px;color:#7B93FF}.drop h2{margin:0;font:600 22px var(--display);color:#fff}.drop p{margin:0;max-width:52ch;color:#a9b3d0}
+.status{font-size:13px;color:var(--gris);min-height:18px;margin:8px 2px}
+.readout{display:flex;flex-wrap:wrap;gap:18px 30px;align-items:flex-end;padding:14px 18px;margin-top:6px}
+.count{font:700 56px/1 var(--display);letter-spacing:-.02em;font-variant-numeric:tabular-nums}.count small{display:block;font:400 13px var(--texto);color:var(--gris);letter-spacing:0;margin-top:4px}
+.stats{display:flex;flex-wrap:wrap;gap:6px 22px}.stat{min-width:90px}.stat b{display:block;font-size:18px;font-variant-numeric:tabular-nums}.stat span{font-size:12px;color:var(--gris)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}.chip{display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--linea);border-radius:999px;padding:5px 12px;background:#fff;cursor:pointer;font-size:13px}.chip i{width:10px;height:10px;border-radius:50%;display:inline-block}.chip[aria-pressed="false"]{opacity:.45}
+.side{padding:0;overflow:hidden}.side details{border-bottom:1px solid var(--linea)}.side details:last-child{border-bottom:0}.side summary{cursor:pointer;padding:13px 16px;font-weight:700;font-family:var(--display);font-size:16px;list-style:none;display:flex;justify-content:space-between}.side summary::-webkit-details-marker{display:none}.side summary::after{content:"+";color:var(--gris);font-weight:400}.side details[open] summary::after{content:"–"}
+.grp{padding:2px 16px 16px;display:grid;gap:12px}
+.fld label{display:flex;justify-content:space-between;font-size:13px;font-weight:700;color:var(--acero);margin-bottom:4px}.fld label output{font-variant-numeric:tabular-nums;color:var(--brasa-osc);font-weight:700}
+.fld input[type=range]{width:100%;accent-color:var(--brasa)}
+.fld select,.fld input[type=text],.fld input[type=password],.fld input[type=number]{width:100%;padding:9px 11px;border:1.5px solid var(--linea);border-radius:10px;background:#fff;font:14.5px var(--texto);color:var(--tinta)}
+.fld select:focus,.fld input:focus{outline:none;border-color:var(--brasa);box-shadow:0 0 0 3px rgba(228,87,46,.18)}
+.hint{font-size:12px;color:var(--gris);margin:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+/* resultados */
+.nu-ph{display:flex;gap:10px;justify-content:space-between;align-items:baseline;flex-wrap:wrap}.nu-ph h3{margin:0}
+.pos{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:8px 0}@media(max-width:700px){.pos{grid-template-columns:1fr}}
+.combos{display:flex;flex-wrap:wrap;gap:6px;font-size:13px;margin-top:6px}.combos span{border:1px solid var(--linea);border-radius:8px;padding:4px 10px;background:#fff;font-variant-numeric:tabular-nums}
+.tablewrap{max-height:340px;overflow:auto;margin-top:10px;border:1px solid var(--linea-2);border-radius:12px}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}th,td{padding:7px 11px;text-align:right;border-bottom:1px solid var(--linea-2);white-space:nowrap}th{position:sticky;top:0;background:var(--papel);font-weight:700;color:var(--acero)}th:first-child,td:first-child{text-align:left}
+tr.nrow{cursor:pointer}tr.nrow:hover{background:#F3F6FF}tr.sel{background:#FFE9E1}.dotc{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+.ai-out{white-space:pre-wrap;font-size:14px;border:1px solid var(--linea);border-radius:12px;padding:12px 14px;background:var(--papel);max-height:360px;overflow:auto;margin-top:12px}.ai-out:empty{display:none}
+.nu-prev{margin-top:10px}.nu-prev summary{cursor:pointer;font-size:13px;color:var(--acero);font-weight:600}
+pre.payload{font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;background:#0B1C2E;color:#cfd8ff;padding:12px;border-radius:12px;max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:8px 0 0}
+.nu-foot{max-width:1180px;margin:10px auto 0;padding:0 16px 110px}.nu-foot hr{border:0;border-top:1px solid var(--linea);margin:0 0 16px}.nu-foot p{margin:0;font-size:12.8px;color:#6E8299;max-width:90ch;line-height:1.55}
+.glos div{display:block;margin-bottom:12px}.glos b{display:block}
+.tb-in{gap:10px}.stepper{min-width:0;flex:1 1 auto;justify-content:center;gap:2px}.logo,.tb-tools{flex:none}
+@media(max-width:900px){.tb-btn .lbl{display:none}}@media(max-width:720px){.hero{padding:28px 20px 24px}.nu-strip{font-size:11.5px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+#sliders{display:grid;gap:14px}
+.readout .chip,.chips .chip{background:#fff;color:var(--tinta);border:1.5px solid var(--linea);font-weight:600}.chips .chip:hover{border-color:var(--acero-claro)}.chips .chip b{font-variant-numeric:tabular-nums}
+
+/* lote */
+.nu-lote{padding:14px 16px;margin-bottom:12px}.nu-lh{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap}.nu-lh small{display:block;margin-top:2px;max-width:60ch}
+.nu-prog{height:5px;background:var(--linea-2);border-radius:5px;overflow:hidden;margin-top:10px}.nu-prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--brasa),#F59E0B);transition:width .3s}
+.nu-list{display:grid;gap:6px;margin-top:8px;max-height:220px;overflow:auto}
+.nu-it{display:flex;gap:10px;align-items:center;padding:8px 10px;border:1.5px solid var(--linea);border-radius:12px;cursor:pointer;background:#fff}.nu-it:hover{border-color:var(--acero-claro)}.nu-it.on{border-color:var(--brasa);background:var(--brasa-suave)}.nu-it b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}.nu-it small{color:var(--gris);font-size:12px}
+.nu-n{width:24px;height:24px;border-radius:8px;background:var(--tinta);color:#fff;font:700 12px var(--mono);display:grid;place-items:center;flex:none}
+.nu-x2{border:0;background:transparent;color:var(--gris);cursor:pointer;font-size:14px;padding:4px 6px;border-radius:6px}.nu-x2:hover{background:var(--brasa-suave);color:var(--brasa-osc)}
+.nu-chip{display:inline-block;font:700 11.5px var(--texto);border-radius:999px;padding:3px 10px;background:var(--linea-2);color:var(--acero);white-space:nowrap}.nu-chip.ok{background:var(--forjado-suave);color:#0B5A4E}.nu-chip.warn{background:#FFF1D6;color:#7A4B00}.nu-chip.err{background:var(--brasa-suave);color:var(--aviso)}
+</style></head>
+<body>
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m10 8 6 4-6 4z"/></symbol>
+  <symbol id="i-rocket" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/></symbol>
+  <symbol id="i-quiz" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8M13 12h8M13 18h8"/></symbol>
+  <symbol id="i-cards" viewBox="0 0 24 24"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></symbol>
+  <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6M10 22h4"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></symbol>
+  <symbol id="i-github" viewBox="0 0 24 24"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></symbol>
+  <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 3v4M17 5h4M5 17v4M3 19h4"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></symbol>
+  <symbol id="i-form" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+  <symbol id="i-tablet" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M12 18h.01"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M12 18h.01"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M6 14l1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7M9 11h5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+  <symbol id="i-print" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+  <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 3v18M7 21h10M5 7h14M5 7l-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6"/></symbol>
+<symbol id="i-nucleo" viewBox="0 0 24 24"><circle cx="9" cy="10" r="5"/><circle cx="16.5" cy="14.5" r="4.5"/><path d="M9 10h.01M16.5 14.5h.01"/></symbol></svg>
+<div class="topbar">
+  <div class="tb-in">
+    <button class="logo" id="goHome" type="button" aria-label="Inicio"><span class="anv"><svg class="i"><use href="#i-nucleo"/></svg></span><span>Nucle<em>IA</em></span></button>
+    <nav class="stepper" id="stepper" aria-label="Pasos"></nav>
+    <div class="tb-tools"><button class="tb-btn" id="btnIA" type="button"><svg class="i"><use href="#i-key"/></svg><span class="lbl">Asistente</span></button><button class="tb-btn" id="btnHelp" type="button"><svg class="i"><use href="#i-help"/></svg><span class="lbl">Ayuda</span></button></div>
+  </div>
+  <div class="progress"><span id="progBar"></span></div>
+  <div class="nu-strip" id="ledger" role="status" aria-live="polite"><span class="dot"></span><span id="ledgerTxt">Nada ha salido de este equipo</span></div>
+</div>
+
+<main id="app">
+<!-- 0 · INICIO -->
+<section class="screen" data-step="0">
+  <div class="hero">
+    <svg class="nu-art" viewBox="0 0 520 300" aria-hidden="true"><defs><filter id="nb"><feGaussianBlur stdDeviation="2"/></filter><radialGradient id="ng1"><stop offset="0" stop-color="#7B93FF"/><stop offset="1" stop-color="#2A40B8"/></radialGradient><radialGradient id="ng2"><stop offset="0" stop-color="#6EE7B7"/><stop offset="1" stop-color="#0E8C7A"/></radialGradient><radialGradient id="ng3"><stop offset="0" stop-color="#FF9B7A"/><stop offset="1" stop-color="#C73E1D"/></radialGradient></defs>
+      <g filter="url(#nb)" opacity=".92"><circle cx="90" cy="70" r="30" fill="url(#ng1)"/><circle cx="128" cy="92" r="26" fill="url(#ng1)"/><circle cx="240" cy="50" r="24" fill="url(#ng2)"/><circle cx="330" cy="120" r="34" fill="url(#ng1)"/><circle cx="372" cy="146" r="27" fill="url(#ng3)"/><circle cx="200" cy="170" r="28" fill="url(#ng2)"/><circle cx="440" cy="60" r="26" fill="url(#ng1)"/><circle cx="460" cy="210" r="30" fill="url(#ng2)"/><circle cx="120" cy="230" r="25" fill="url(#ng3)"/><circle cx="290" cy="240" r="30" fill="url(#ng1)"/><circle cx="55" cy="160" r="18" fill="url(#ng1)"/></g>
+      <g fill="none" stroke="#E4572E" stroke-width="2.5" opacity=".9"><circle cx="90" cy="70" r="33"/><circle cx="128" cy="92" r="29"/><circle cx="330" cy="120" r="37"/><circle cx="372" cy="146" r="30"/><circle cx="200" cy="170" r="31" stroke="#3ddc97"/><circle cx="290" cy="240" r="33" stroke="#3ddc97"/></g></svg>
+    <p class="eyebrow">Microscopía de fluorescencia · Recuento de núcleos · Instituto de Neurociencias CSIC–UMH</p>
+    <h1>Cuenta núcleos en tus imágenes, <em>sin que la imagen salga de tu ordenador</em></h1>
+    <p class="lede">NucleIA detecta, separa y puntúa cada núcleo con un algoritmo determinista: con los mismos parámetros, el mismo resultado. Analiza una imagen o un lote entero con las mismas condiciones, revisas sobre la imagen, corriges lo que haga falta y exportas el recuento con todas las medidas para repetir el análisis.</p>
+    <div class="actions"><button class="btn btn-primary btn-big" id="pick0" type="button"><svg class="i"><use href="#i-upload"/></svg>Abrir imágenes</button><button class="btn btn-ghost btn-big" id="demo0" type="button"><svg class="i"><use href="#i-eye"/></svg>Probar con una imagen sintética</button></div>
+    <p class="nu-formatos">PNG, JPG o WebP en color. Puedes abrir una imagen o un lote entero, y también arrastrarlas a cualquier parte de esta página. Los TIFF solo los abre Safari: si usas otro navegador, expórtalos antes a PNG.</p>
+    <div class="nu-autores"><span class="nu-autores-cap">Realizada entre</span>
+      <div class="nu-autor"><span class="nu-av" style="--c:#2A40B8">AE</span><div><b>Augusto Escalante Rodríguez</b><small>Instituto de Neurociencias (CSIC–Universidad Miguel Hernández)</small><a class="nu-orcid" href="https://orcid.org/0000-0003-4955-6213" target="_blank" rel="noopener">ORCID 0000-0003-4955-6213</a></div></div><span class="nu-x">×</span>
+      <div class="nu-autor"><span class="nu-av" style="--c:#E4572E">FB</span><div><b>Fernando Borrás Rocher</b><small>Universidad Miguel Hernández de Elche</small><a class="nu-orcid" href="https://orcid.org/0000-0002-5519-4573" target="_blank" rel="noopener">ORCID 0000-0002-5519-4573</a></div></div></div>
+  </div>
+  <h2 class="sec-title">Cómo cuenta</h2>
+  <div class="journey" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">
+    <div class="jstop" style="--c:#2A40B8"><span class="jn">1</span><div class="ji"><svg class="i"><use href="#i-sliders"/></svg></div><b>Canal y fondo</b><span>Elige el canal de los núcleos y se resta el fondo irregular de la imagen.</span></div>
+    <div class="jstop" style="--c:#1F6FB2"><span class="jn">2</span><div class="ji"><svg class="i"><use href="#i-grid"/></svg></div><b>Umbral de Otsu</b><span>Separa núcleos de fondo con un umbral automático que puedes desplazar.</span></div>
+    <div class="jstop" style="--c:#0E8C7A"><span class="jn">3</span><div class="ji"><svg class="i"><use href="#i-target"/></svg></div><b>Separación</b><span>Distancia y <i>watershed</i> por semillas parten los núcleos que se tocan.</span></div>
+    <div class="jstop" style="--c:#C98200"><span class="jn">4</span><div class="ji"><svg class="i"><use href="#i-check"/></svg></div><b>Calidad por núcleo</b><span>Cada objeto es bueno, dudoso o para revisar según área, forma, brillo y contraste.</span></div>
+    <div class="jstop" style="--c:#E4572E"><span class="jn">5</span><div class="ji"><svg class="i"><use href="#i-pencil"/></svg></div><b>Tu revisión</b><span>Quita falsos positivos y añade los que falten; todo queda registrado.</span></div>
+  </div>
+  <h2 class="sec-title">Dónde va cada cosa</h2>
+  <div class="zonas"><div class="zona l"><h4>Siempre en tu ordenador</h4><ul><li>La imagen: se procesa en este navegador</li><li>El recuento, las correcciones y las exportaciones</li><li>Tus parámetros, que se recuerdan en este navegador</li></ul></div>
+    <div class="zona n"><h4>Solo si usas el asistente (opcional)</h4><ul><li>Un resumen en JSON con los parámetros y las estadísticas</li><li>Nunca la imagen. Antes de cada consulta puedes ver exactamente qué se envía</li><li>El asistente sugiere ajustes y redacta texto; no cuenta núcleos</li></ul></div></div>
+</section>
+
+<!-- 1 · DETECCIÓN -->
+<section class="screen" data-step="1">
+  <header class="sh" style="--c:#2A40B8"><div class="sh-ico"><svg class="i"><use href="#i-nucleo"/></svg></div><div><p class="sh-step">Paso 1 de 2</p><h2>Detectar y corregir</h2><p class="sh-lede">Ajusta los parámetros hasta que los contornos encajen con los núcleos y corrige a mano lo que haga falta. El recuento se actualiza al instante.</p></div></header>
+  <div class="nu-app">
+    <section aria-label="Imagen">
+      <div class="card nu-lote" id="loteCard" style="display:none">
+        <div class="nu-lh"><div><h3 id="loteHead" style="margin:0">Lote</h3><small class="muted" id="loteSub"></small></div>
+          <div class="actions" style="margin:0"><label class="btn btn-ghost btn-sm" for="fileAdd" style="cursor:pointer"><svg class="i"><use href="#i-plus"/></svg>Añadir imágenes</label><button class="btn btn-primary btn-sm" id="loteRun" type="button"><svg class="i"><use href="#i-sparkles"/></svg>Analizar todo el lote</button><button class="btn btn-ghost btn-sm" id="loteStop" type="button" style="display:none">Detener</button></div></div>
+        <div class="nu-prog"><i id="loteBar"></i></div><div class="hint" id="loteProg" style="min-height:16px;margin:4px 0"></div>
+        <div class="nu-list" id="loteList"></div>
+      </div>
+      <div class="nu-toolbar card">
+        <div class="nu-tg"><span class="tb-label">Vista</span><span class="seg" id="segView"><button data-v="orig" aria-pressed="true">Original</button><button data-v="chan" aria-pressed="false">Canal de núcleos</button><button data-v="mask" aria-pressed="false">Máscara</button></span></div>
+        <div class="nu-tg"><span class="tb-label">Clic para</span><span class="seg" id="segTool"><button data-t="select" aria-pressed="true">Seleccionar</button><button data-t="delete" aria-pressed="false">Quitar</button><button data-t="add" aria-pressed="false">Añadir</button></span></div>
+        <div class="nu-tg"><label class="tb-label" for="zoom">Zoom</label><input type="range" id="zoom" min="0.5" max="4" step="0.25" value="1" style="width:110px"><output id="zoomOut">ajustado</output><button class="btn btn-ghost btn-sm" id="fit" type="button">Ajustar</button></div>
+        <label class="chk"><input type="checkbox" id="showIds" checked> Números</label>
+        <label class="chk"><input type="checkbox" id="showOut" checked> Contornos</label>
+        <button class="btn btn-ghost btn-sm" id="undo" type="button" disabled><svg class="i"><use href="#i-refresh"/></svg>Deshacer corrección</button>
+      </div>
+      <div class="stage" id="stage">
+        <div class="drop" id="drop"><svg class="i"><use href="#i-upload"/></svg><h2>Suelta aquí tus imágenes de fluorescencia</h2><p>PNG, JPG o WebP en color (rojo, verde y azul). Puedes soltar varias a la vez. Los archivos no se suben a ningún sitio.</p><div class="actions" style="justify-content:center"><button class="btn btn-primary" id="pick" type="button">Abrir imágenes</button><button class="btn" id="demo" type="button">Probar con una imagen sintética</button></div></div>
+        <div class="wrap" id="wrap"><canvas id="cBase"></canvas><canvas id="cOver" aria-label="Capa de núcleos detectados"></canvas></div>
+      </div>
+      <input type="file" id="file" accept="image/*" multiple hidden><input type="file" id="fileAdd" accept="image/*" multiple hidden>
+      <div class="status" id="status" role="status"></div>
+      <div class="card readout" id="readout" style="display:none">
+        <div class="count"><span id="nCount">0</span><small id="nLabel">núcleos</small></div>
+        <div class="stats" id="stats"></div>
+        <div class="chips" id="chips">
+          <button class="chip" data-c="bueno" aria-pressed="true"><i style="background:#3ddc97"></i><span>Buenos <b id="cGood">0</b></span></button>
+          <button class="chip" data-c="dudoso" aria-pressed="true"><i style="background:#ffb83d"></i><span>Dudosos <b id="cDub">0</b></span></button>
+          <button class="chip" data-c="revisar" aria-pressed="true"><i style="background:#ff5d73"></i><span>Revisar <b id="cRev">0</b></span></button>
+          <button class="chip" data-c="manual" aria-pressed="true"><i style="background:#7cc4ff"></i><span>Manuales <b id="cMan">0</b></span></button>
+        </div>
+      </div>
+    </section>
+    <aside class="side card" aria-label="Parámetros">
+      <details open><summary>Detección</summary><div class="grp">
+        <div class="fld"><label for="channel">Canal que define los núcleos</label><select id="channel"><option value="b">Azul (DAPI / Hoechst)</option><option value="g">Verde</option><option value="r">Rojo</option><option value="max">Máximo de rojo, verde y azul</option><option value="lum">Luminancia</option></select><p class="hint">Si los tres canales son marcadores nucleares distintos, usa el máximo para contarlos todos.</p></div>
+        <div id="sliders"></div>
+        <label class="chk"><input type="checkbox" id="autoThr" checked> Umbral automático (Otsu) más desplazamiento</label>
+        <button class="btn btn-ghost btn-sm" id="reset" type="button">Restablecer parámetros</button></div></details>
+      <details open><summary>Escala</summary><div class="grp">
+        <div class="fld"><label for="umpx">Micras por píxel (opcional)</label><input type="number" id="umpx" min="0" step="0.001" placeholder="p. ej. 0.62"></div>
+        <p class="hint">Con la escala, las áreas se dan también en µm² y se calcula la densidad por mm².</p></div></details>
+    </aside>
+  </div>
+</section>
+
+<!-- 2 · RESULTADOS -->
+<section class="screen" data-step="2">
+  <header class="sh" style="--c:#0E8C7A"><div class="sh-ico"><svg class="i"><use href="#i-download"/></svg></div><div><p class="sh-step">Paso 2 de 2</p><h2>Resultados y exportación</h2><p class="sh-lede">Marcadores por núcleo, tabla de medidas y exportación. Si quieres, el asistente redacta métodos y resultados a partir del resumen.</p></div></header>
+  <div class="card" id="res0"><p class="empty">Primero abre una imagen y deja que se analice.</p></div>
+  <div id="resBody" style="display:none">
+    <div class="card" id="loteRes" style="display:none"><div class="nu-ph"><h3>Resumen del lote</h3><span class="hint" id="loteStats"></span></div><div id="loteNota"></div>
+      <div class="tablewrap"><table id="loteTbl"></table></div>
+      <div class="actions"><button class="btn btn-primary btn-sm" id="expLoteCsv" type="button" disabled>CSV del lote</button><button class="btn btn-ghost btn-sm" id="expLoteNuc" type="button" disabled>CSV de todos los núcleos</button><button class="btn btn-ghost btn-sm" id="expLoteJson" type="button" disabled>JSON del lote</button></div>
+      <p class="help">Pulsa una fila para abrir esa imagen y revisarla. Las exportaciones y la tabla de abajo corresponden a la imagen activa.</p></div>
+    <div class="card" id="posCard"><div class="nu-ph"><h3>Marcadores por núcleo</h3><span class="hint">Un núcleo es positivo si su media en ese canal supera el umbral</span></div>
+      <div class="grp"><div class="pos"><div class="fld"><label for="thR">Rojo <output id="tR"></output></label><input type="range" id="thR" min="0" max="255" step="1"></div><div class="fld"><label for="thG">Verde <output id="tG"></output></label><input type="range" id="thG" min="0" max="255" step="1"></div><div class="fld"><label for="thB">Azul <output id="tB"></output></label><input type="range" id="thB" min="0" max="255" step="1"></div></div>
+        <label class="chk"><input type="checkbox" id="posAuto" checked> Umbrales automáticos (Otsu sobre las medias de los núcleos)</label>
+        <div class="combos" id="combos"></div></div></div>
+    <div class="card" id="tblCard"><div class="nu-ph"><h3>Núcleos detectados <span class="hint" id="tblNote"></span></h3></div><div class="tablewrap"><table id="tbl"></table></div></div>
+    <div class="card"><h3>Exportar</h3><div class="actions" style="margin-top:0"><button class="btn btn-primary" id="expJson" type="button" disabled>JSON</button><button class="btn btn-ghost" id="expCsv" type="button" disabled>CSV</button><button class="btn btn-ghost" id="expPng" type="button" disabled>PNG con contornos</button></div><p class="help">El JSON incluye los parámetros exactos, las correcciones manuales y todas las medidas, para repetir el análisis más adelante.</p></div>
+    <div class="card" id="aiCard"><h3>Asistente OpenAI <small class="muted">(opcional)</small></h3>
+      <p class="help" style="margin-top:0">Recibe solo un resumen en JSON: parámetros, estadísticas y, si lo marcas, una tabla de núcleos. <b>Nunca recibe la imagen.</b> No cuenta núcleos: sugiere ajustes y redacta texto.</p>
+      <div class="grid2"><div class="fld"><label for="apiKey">Clave de API</label><input type="password" id="apiKey" autocomplete="off" placeholder="sk-..."></div><div class="fld"><label for="model">Modelo</label><input type="text" id="model" list="models" value="gpt-4o-mini"><datalist id="models"><option value="gpt-4o-mini"><option value="gpt-4o"></datalist></div></div>
+      <label class="chk"><input type="checkbox" id="remember"> Recordar la clave en este navegador</label>
+      <label class="chk" style="margin-top:6px"><input type="checkbox" id="inclTable"> Incluir tabla por núcleo (hasta 150 filas con coordenadas)</label>
+      <div class="actions"><button class="btn btn-ghost btn-sm" id="aiSuggest" type="button" disabled><svg class="i"><use href="#i-sparkles"/></svg>Sugerir ajustes</button><button class="btn btn-ghost btn-sm" id="aiQc" type="button" disabled>Control de calidad</button><button class="btn btn-ghost btn-sm" id="aiReport" type="button" disabled>Métodos y resultados</button></div>
+      <details class="nu-prev"><summary>Ver qué se enviaría</summary><pre class="payload" id="payloadPrev">Carga una imagen para ver el resumen.</pre></details>
+      <div class="ai-out" id="aiOut"></div>
+      <div class="actions"><button class="btn btn-primary btn-sm" id="aiApply" type="button" style="display:none">Aplicar los ajustes sugeridos</button></div>
+      <p class="help">La clave la pagas tú. Con «Recordar» queda guardada sin cifrar en este navegador (clave <code>ia_openai_key</code>, como en el resto del catálogo).</p></div>
+  </div>
+</section>
+</main>
+
+<footer class="nu-foot"><hr><p><b>NucleIA</b> · Augusto Escalante Rodríguez (Instituto de Neurociencias, CSIC–UMH) × Fernando Borrás Rocher (Universidad Miguel Hernández de Elche). Método: corrección de fondo, suavizado, umbral de Otsu, apertura morfológica, transformada de distancia y watershed por semillas. El recuento es determinista y reproducible con los mismos parámetros; revísalo siempre sobre la imagen antes de usarlo en un resultado.</p></footer>
+<div class="bottomnav"><div class="bn-in"><button class="btn btn-ghost" id="navBack" type="button"><svg class="i"><use href="#i-left"/></svg>Atrás</button><div class="bn-hint" id="navHint"></div><button class="btn btn-primary" id="navNext" type="button"><span id="navNextTxt">Siguiente</span><svg class="i"><use href="#i-right"/></svg></button></div></div>
+
+<div class="modal" id="mHelp" role="dialog" aria-modal="true" aria-labelledby="mHelpT"><div class="modal-box"><div class="modal-head"><h2 id="mHelpT">Ayuda</h2><button type="button" data-close>Cerrar</button></div><div class="modal-body"><div class="glos" id="glos"></div></div></div></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>const Core = (() => {
+  const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+
+  function channelOf(rgba, n, mode) {
+    const o = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const r = rgba[4 * i], g = rgba[4 * i + 1], b = rgba[4 * i + 2];
+      o[i] = mode === 'r' ? r : mode === 'g' ? g : mode === 'b' ? b :
+        mode === 'max' ? Math.max(r, g, b) : 0.299 * r + 0.587 * g + 0.114 * b;
+    }
+    return o;
+  }
+
+  function kernel1D(sigma) {
+    const r = Math.max(1, Math.ceil(sigma * 3));
+    const k = new Float32Array(2 * r + 1);
+    let s = 0;
+    for (let i = -r; i <= r; i++) { const v = Math.exp(-(i * i) / (2 * sigma * sigma)); k[i + r] = v; s += v; }
+    for (let i = 0; i < k.length; i++) k[i] /= s;
+    return k;
+  }
+
+  function gauss(src, w, h, sigma) {
+    if (!(sigma > 0)) return Float32Array.from(src);
+    const k = kernel1D(sigma), r = (k.length - 1) >> 1;
+    const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) {
+        let s = 0;
+        for (let j = -r; j <= r; j++) { let xx = x + j; xx = xx < 0 ? 0 : (xx >= w ? w - 1 : xx); s += src[row + xx] * k[j + r]; }
+        tmp[row + x] = s;
+      }
+    }
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let s = 0;
+        for (let j = -r; j <= r; j++) { let yy = y + j; yy = yy < 0 ? 0 : (yy >= h ? h - 1 : yy); s += tmp[yy * w + x] * k[j + r]; }
+        out[y * w + x] = s;
+      }
+    }
+    return out;
+  }
+
+  function minFilter(src, w, h, r) {
+    const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) {
+        let m = Infinity;
+        const a = Math.max(0, x - r), b = Math.min(w - 1, x + r);
+        for (let xx = a; xx <= b; xx++) { const v = src[row + xx]; if (v < m) m = v; }
+        tmp[row + x] = m;
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      for (let y = 0; y < h; y++) {
+        let m = Infinity;
+        const a = Math.max(0, y - r), b = Math.min(h - 1, y + r);
+        for (let yy = a; yy <= b; yy++) { const v = tmp[yy * w + x]; if (v < m) m = v; }
+        out[y * w + x] = m;
+      }
+    }
+    return out;
+  }
+
+  // Fondo estimado: mínimo local (tipo rolling ball) suavizado
+  function background(src, w, h, r) {
+    if (r <= 0) return new Float32Array(w * h);
+    return gauss(minFilter(src, w, h, r), w, h, Math.max(1, r / 1.5));
+  }
+
+  function normalize(a, pct) {
+    const n = a.length;
+    let mx = 0;
+    for (let i = 0; i < n; i++) if (a[i] > mx) mx = a[i];
+    const out = new Float32Array(n);
+    if (mx <= 0) return out;
+    const B = 1024, hist = new Uint32Array(B);
+    for (let i = 0; i < n; i++) hist[Math.min(B - 1, (a[i] / mx * (B - 1)) | 0)]++;
+    let acc = 0, p = mx;
+    const target = n * (pct / 100);
+    for (let b = 0; b < B; b++) { acc += hist[b]; if (acc >= target) { p = (b + 1) / (B - 1) * mx; break; } }
+    const sc = 255 / Math.max(p, 1);
+    for (let i = 0; i < n; i++) { const v = a[i] * sc; out[i] = v > 255 ? 255 : v; }
+    return out;
+  }
+
+  function otsu(vals) {
+    const hist = new Float64Array(256);
+    for (let i = 0; i < vals.length; i++) hist[clamp(Math.round(vals[i]), 0, 255)]++;
+    const total = vals.length;
+    let sumAll = 0;
+    for (let t = 0; t < 256; t++) sumAll += t * hist[t];
+    let wB = 0, sumB = 0, best = -1, thr = 0;
+    for (let t = 0; t < 256; t++) {
+      wB += hist[t];
+      if (!wB) continue;
+      const wF = total - wB;
+      if (!wF) break;
+      sumB += t * hist[t];
+      const mB = sumB / wB, mF = (sumAll - sumB) / wF;
+      const between = wB * wF * (mB - mF) * (mB - mF);
+      if (between > best) { best = between; thr = t; }
+    }
+    return thr;
+  }
+
+  function erode(m, w, h) {
+    const o = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (!m[i]) continue;
+      if ((x === 0 || m[i - 1]) && (x === w - 1 || m[i + 1]) && (y === 0 || m[i - w]) && (y === h - 1 || m[i + w])) o[i] = 1;
+    }
+    return o;
+  }
+  function dilate(m, w, h) {
+    const o = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (m[i] || (x > 0 && m[i - 1]) || (x < w - 1 && m[i + 1]) || (y > 0 && m[i - w]) || (y < h - 1 && m[i + w])) o[i] = 1;
+    }
+    return o;
+  }
+  function opening(m, w, h, r) {
+    for (let k = 0; k < r; k++) m = erode(m, w, h);
+    for (let k = 0; k < r; k++) m = dilate(m, w, h);
+    return m;
+  }
+
+  // Transformada de distancia (chamfer 1 / 1.414); el exterior de la imagen cuenta como fondo
+  function distTransform(mask, w, h) {
+    const d = new Float32Array(w * h), A = 1, B = 1.4142;
+    for (let i = 0; i < d.length; i++) d[i] = mask[i] ? 1e9 : 0;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (!mask[i]) continue;
+      let v = d[i];
+      if (x === 0 || y === 0) v = Math.min(v, A);
+      if (x > 0) v = Math.min(v, d[i - 1] + A);
+      if (y > 0) {
+        v = Math.min(v, d[i - w] + A);
+        if (x > 0) v = Math.min(v, d[i - w - 1] + B);
+        if (x < w - 1) v = Math.min(v, d[i - w + 1] + B);
+      }
+      d[i] = v;
+    }
+    for (let y = h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--) {
+      const i = y * w + x;
+      if (!mask[i]) continue;
+      let v = d[i];
+      if (x === w - 1 || y === h - 1) v = Math.min(v, A);
+      if (x < w - 1) v = Math.min(v, d[i + 1] + A);
+      if (y < h - 1) {
+        v = Math.min(v, d[i + w] + A);
+        if (x < w - 1) v = Math.min(v, d[i + w + 1] + B);
+        if (x > 0) v = Math.min(v, d[i + w - 1] + B);
+      }
+      d[i] = v;
+    }
+    return d;
+  }
+
+  // Semillas: máximos locales de la distancia en una ventana (md), agrupados por conectividad
+  function findMarkers(dt, mask, w, h, md) {
+    const cand = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (!mask[i] || dt[i] < 1) continue;
+      const v = dt[i];
+      let ok = true;
+      const y0 = Math.max(0, y - md), y1 = Math.min(h - 1, y + md), x0 = Math.max(0, x - md), x1 = Math.min(w - 1, x + md);
+      for (let yy = y0; yy <= y1 && ok; yy++) {
+        const row = yy * w;
+        for (let xx = x0; xx <= x1; xx++) if (dt[row + xx] > v) { ok = false; break; }
+      }
+      if (ok) cand[i] = 1;
+    }
+    const lab = new Int32Array(w * h);
+    let n = 0;
+    const stack = [];
+    for (let i = 0; i < cand.length; i++) {
+      if (!cand[i] || lab[i]) continue;
+      n++;
+      lab[i] = n; stack.push(i);
+      while (stack.length) {
+        const p = stack.pop(), px = p % w, py = (p / w) | 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const xx = px + dx, yy = py + dy;
+          if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+          const j = yy * w + xx;
+          if (cand[j] && !lab[j]) { lab[j] = n; stack.push(j); }
+        }
+      }
+    }
+    return { lab, n };
+  }
+
+  // Watershed por inundación con cola de prioridad por cubos (prioridad = distancia descendente)
+  function watershed(dt, mask, markerLab, w, h) {
+    const lab = Int32Array.from(markerLab);
+    let maxD = 0;
+    for (let i = 0; i < dt.length; i++) if (mask[i] && dt[i] > maxD) maxD = dt[i];
+    const S = 8, nb = Math.ceil(maxD * S) + 3;
+    const buckets = Array.from({ length: nb }, () => []);
+    for (let i = 0; i < lab.length; i++) if (lab[i]) buckets[Math.min(nb - 1, Math.round((maxD - dt[i]) * S))].push(i);
+    let p = 0;
+    while (p < nb) {
+      const bk = buckets[p];
+      if (!bk.length) { p++; continue; }
+      const i = bk.pop(), l = lab[i], x = i % w, y = (i / w) | 0;
+      const nbrs = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1];
+      for (let k = 0; k < 4; k++) {
+        const j = nbrs[k];
+        if (j < 0 || !mask[j] || lab[j]) continue;
+        lab[j] = l;
+        const q = Math.max(p, Math.min(nb - 1, Math.round((maxD - dt[j]) * S)));
+        buckets[q].push(j);
+      }
+    }
+    return lab;
+  }
+
+  const score01 = (v, a, b) => clamp((v - a) / (b - a), 0, 1);
+
+  function median(a) {
+    if (!a.length) return 0;
+    const s = Array.from(a).sort((x, y) => x - y), m = s.length >> 1;
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  }
+
+  function analyze(img, P, cache) {
+    const { rgba, w, h } = img, n = w * h;
+    const key = P.channel + '|' + P.bgRadius;
+    if (!cache || cache.key !== key) {
+      const raw = channelOf(rgba, n, P.channel);
+      const bg = background(raw, w, h, P.bgRadius);
+      const sub = new Float32Array(n);
+      for (let i = 0; i < n; i++) sub[i] = Math.max(0, raw[i] - bg[i]);
+      cache = { key, norm: normalize(sub, 99.5) };
+    }
+    const sm = gauss(cache.norm, w, h, P.blur);
+    const autoThr = otsu(sm);
+    const thr = P.autoThr ? clamp(autoThr + P.thrOffset, 1, 254) : P.threshold;
+    let mask = new Uint8Array(n);
+    for (let i = 0; i < n; i++) mask[i] = sm[i] > thr ? 1 : 0;
+    mask = opening(mask, w, h, P.open);
+    const dt = gauss(distTransform(mask, w, h), w, h, P.splitSmooth);
+    const mk = findMarkers(dt, mask, w, h, P.minDist);
+    const lab = watershed(dt, mask, mk.lab, w, h);
+    const L = mk.n + 1;
+
+    const area = new Float64Array(L), sx = new Float64Array(L), sy = new Float64Array(L);
+    const x0 = new Int32Array(L).fill(1e9), y0 = new Int32Array(L).fill(1e9), x1 = new Int32Array(L).fill(-1), y1 = new Int32Array(L).fill(-1);
+    const sR = new Float64Array(L), sG = new Float64Array(L), sB = new Float64Array(L), sN = new Float64Array(L), mxN = new Float64Array(L);
+    const edges = new Float64Array(L), touch = new Float64Array(L);
+    const edgePix = Array.from({ length: L }, () => []);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x, l = lab[i];
+      if (!l) continue;
+      area[l]++; sx[l] += x; sy[l] += y;
+      if (x < x0[l]) x0[l] = x; if (x > x1[l]) x1[l] = x; if (y < y0[l]) y0[l] = y; if (y > y1[l]) y1[l] = y;
+      sR[l] += rgba[4 * i]; sG[l] += rgba[4 * i + 1]; sB[l] += rgba[4 * i + 2];
+      const nv = cache.norm[i]; sN[l] += nv; if (nv > mxN[l]) mxN[l] = nv;
+      let e = 0, t = 0;
+      const nb4 = [x > 0 ? lab[i - 1] : 0, x < w - 1 ? lab[i + 1] : 0, y > 0 ? lab[i - w] : 0, y < h - 1 ? lab[i + w] : 0];
+      for (let k = 0; k < 4; k++) if (nb4[k] !== l) { e++; if (nb4[k] > 0) t++; }
+      if (e) { edges[l] += e; touch[l] += t; edgePix[l].push(i); }
+    }
+    // Anillo exterior (2 px) para contraste local
+    const ringSum = new Float64Array(L), ringN = new Float64Array(L), seen = new Uint8Array(n);
+    for (let l = 1; l < L; l++) {
+      for (const i of edgePix[l]) {
+        const x = i % w, y = (i / w) | 0;
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+          const xx = x + dx, yy = y + dy;
+          if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+          const j = yy * w + xx;
+          if (lab[j] || seen[j]) continue;
+          seen[j] = 1; ringSum[l] += cache.norm[j]; ringN[l]++;
+        }
+      }
+    }
+
+    let nucs = [], rejectedSmall = 0;
+    for (let l = 1; l < L; l++) {
+      if (!area[l]) continue;
+      if (area[l] < P.minArea) { rejectedSmall++; continue; }
+      const A = area[l], ed = Math.max(edges[l], 1);
+      const circ = clamp(64 * A / (Math.PI * ed * ed), 0, 1);
+      const inN = sN[l] / A, ring = ringN[l] ? ringSum[l] / ringN[l] : 0;
+      nucs.push({
+        label: l, manual: false,
+        x: +(sx[l] / A).toFixed(1), y: +(sy[l] / A).toFixed(1),
+        area: A, radius: +Math.sqrt(A / Math.PI).toFixed(2),
+        bbox: [x0[l], y0[l], x1[l] - x0[l] + 1, y1[l] - y0[l] + 1],
+        circularity: +circ.toFixed(3),
+        mean_intensity: +inN.toFixed(1), max_intensity: +mxN[l].toFixed(0),
+        red_mean: +(sR[l] / A).toFixed(1), green_mean: +(sG[l] / A).toFixed(1), blue_mean: +(sB[l] / A).toFixed(1),
+        ring_mean: +ring.toFixed(1),
+        touching: +(touch[l] / ed).toFixed(3),
+        edgePix: edgePix[l]
+      });
+    }
+    scoreAll(nucs, thr, P);
+    return { nuclei: nucs, lab, mask, sm, thr, autoThr, cache, rejectedSmall, w, h, nMarkers: mk.n };
+  }
+
+  function scoreAll(nucs, thr, P) {
+    const med = median(nucs.filter(o => !o.manual).map(o => o.area)) || 1;
+    for (const o of nucs) {
+      if (o.manual) { o.quality = 1; o.cls = 'manual'; o.parts = null; continue; }
+      const a = o.area / med;
+      let sa = a >= 0.5 && a <= 1.8 ? 1 : a < 0.5 ? score01(a, 0.2, 0.5) : 1 - score01(a, 1.8, 3.2);
+      if (o.area > P.maxArea) sa = 0;
+      const sc = score01(o.circularity, 0.55, 0.9);
+      const si = score01(o.mean_intensity, thr, thr + 0.5 * (255 - thr));
+      const ss = 1 - clamp(o.touching / 0.5, 0, 1);
+      const cr = o.mean_intensity > 0 ? (o.mean_intensity - o.ring_mean) / o.mean_intensity : 0;
+      const sk = clamp(cr / 0.6, 0, 1);
+      o.parts = { area: +sa.toFixed(2), circularity: +sc.toFixed(2), intensity: +si.toFixed(2), separation: +ss.toFixed(2), contrast: +sk.toFixed(2) };
+      o.quality = +(0.25 * sa + 0.20 * sc + 0.20 * si + 0.15 * ss + 0.20 * sk).toFixed(3);
+      o.cls = o.area > P.maxArea ? 'revisar' : o.quality >= 0.7 ? 'bueno' : o.quality >= 0.5 ? 'dudoso' : 'revisar';
+    }
+    return med;
+  }
+
+  // Correcciones humanas: se reaplican sobre cada recuento (por coordenadas, no por id)
+  function applyCorrections(res, img, P, corr) {
+    const { w, h } = res, { rgba } = img;
+    let nucs = res.nuclei.slice();
+    const byLabel = new Map(nucs.map(o => [o.label, o]));
+    const med = median(nucs.map(o => o.area));
+    const rDefault = Math.max(3, Math.round(Math.sqrt((med || 80) / Math.PI)));
+    let nManual = 0;
+    for (const c of corr) {
+      if (c.action === 'delete') {
+        const xi = Math.round(c.x), yi = Math.round(c.y);
+        let target = null;
+        if (xi >= 0 && yi >= 0 && xi < w && yi < h) target = byLabel.get(res.lab[yi * w + xi]);
+        if (!target || !nucs.includes(target)) target = nearest(nucs, c.x, c.y);
+        if (target) nucs = nucs.filter(o => o !== target);
+      } else if (c.action === 'add') {
+        const r = c.r || rDefault, cx = Math.round(c.x), cy = Math.round(c.y);
+        let A = 0, sR = 0, sG = 0, sB = 0, sN = 0, mx = 0;
+        const edge = [];
+        for (let y = Math.max(0, cy - r - 1); y <= Math.min(h - 1, cy + r + 1); y++) for (let x = Math.max(0, cx - r - 1); x <= Math.min(w - 1, cx + r + 1); x++) {
+          const d2 = (x - cx) * (x - cx) + (y - cy) * (y - cy), i = y * w + x;
+          if (d2 <= r * r) {
+            A++; sR += rgba[4 * i]; sG += rgba[4 * i + 1]; sB += rgba[4 * i + 2];
+            const nv = res.cache.norm[i]; sN += nv; if (nv > mx) mx = nv;
+          }
+          if (d2 <= r * r && d2 > (r - 1.2) * (r - 1.2)) edge.push(i);
+        }
+        if (!A) continue;
+        nManual++;
+        nucs.push({
+          label: -nManual, manual: true, x: cx, y: cy, area: A, radius: r, bbox: [cx - r, cy - r, 2 * r + 1, 2 * r + 1],
+          circularity: 1, mean_intensity: +(sN / A).toFixed(1), max_intensity: +mx.toFixed(0),
+          red_mean: +(sR / A).toFixed(1), green_mean: +(sG / A).toFixed(1), blue_mean: +(sB / A).toFixed(1),
+          ring_mean: 0, touching: 0, edgePix: edge
+        });
+      }
+    }
+    scoreAll(nucs, res.thr, P);
+    nucs.sort((a, b) => a.y - b.y || a.x - b.x);
+    nucs.forEach((o, k) => { o.id = k + 1; });
+    return nucs;
+  }
+
+  function nearest(nucs, x, y) {
+    let best = null, bd = Infinity;
+    for (const o of nucs) {
+      const d = Math.hypot(o.x - x, o.y - y);
+      if (d < bd && d <= Math.max(o.radius, 4) + 3) { bd = d; best = o; }
+    }
+    return best;
+  }
+
+  function autoPosThreshold(nucs, key) {
+    const v = nucs.filter(o => !o.manual).map(o => o[key + '_mean']);
+    if (v.length < 8) return 100;
+    return otsu(v);
+  }
+
+  return { analyze, applyCorrections, autoPosThreshold, nearest, median, otsu };
+})();
+if (typeof module !== 'undefined') module.exports = Core;
+
+/* ================= APLICACIÓN ================= */
+const $ = id => document.getElementById(id);
+const $$ = s => [...document.querySelectorAll(s)];
+const ico = n => `<svg class="i"><use href="#i-${n}"/></svg>`;
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(m, ms=4200){ const t = $('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), ms); }
+const DEFAULTS = {channel:'max', bgRadius:15, blur:1, autoThr:true, thrOffset:-10, threshold:60, open:1, minDist:5, splitSmooth:1, minArea:30, maxArea:600};
+const SLIDERS = [
+  {k:'bgRadius', label:'Radio de corrección de fondo (px)', min:0, max:40, step:1, hint:'Debe ser mayor que el radio de un núcleo. 0 desactiva la corrección.'},
+  {k:'blur', label:'Suavizado (σ, px)', min:0, max:3, step:0.5},
+  {k:'thrOffset', label:'Desplazamiento del umbral', min:-60, max:60, step:1, hint:'Negativo: detecta núcleos más tenues.', auto:true},
+  {k:'threshold', label:'Umbral manual', min:1, max:254, step:1, manual:true},
+  {k:'open', label:'Limpieza de ruido (apertura, px)', min:0, max:3, step:1},
+  {k:'minDist', label:'Distancia mínima entre núcleos (px)', min:2, max:20, step:1, hint:'Mayor: separa menos núcleos pegados.'},
+  {k:'splitSmooth', label:'Suavizado de la separación', min:0, max:3, step:0.5},
+  {k:'minArea', label:'Área mínima (px)', min:5, max:400, step:1},
+  {k:'maxArea', label:'Área máxima (px)', min:50, max:5000, step:10, hint:'Los objetos mayores se marcan para revisar.'}
+];
+const S = {img:null, name:'', P:{...DEFAULTS}, cache:null, res:null, nuclei:[], corr:[], pos:{auto:true, r:100, g:100, b:100},
+  view:'orig', tool:'select', zoom:null, selected:null, vis:{bueno:true,dudoso:true,revisar:true,manual:true},
+  srcCanvas:null, chanCanvas:null, maskCanvas:null, aiSent:{calls:0, bytes:0}, aiSuggestion:null, lote:[], cur:-1};
+const COL = {bueno:'#3ddc97', dudoso:'#ffb83d', revisar:'#ff5d73', manual:'#7cc4ff'};
+try{ Object.assign(S.P, JSON.parse(localStorage.getItem('nucleia_params')||'{}')); }catch(e){}
+
+/* ---- Navegación ---- */
+let step = 0;
+const STEPS = ['Inicio','Detección','Resultados'];
+const NAV = [['Abrir y empezar','Abre una imagen o prueba con la sintética.'],['Siguiente: resultados','Los contornos deben encajar con los núcleos. Corrige lo que no.'],['Volver al inicio','Exporta el JSON para poder repetir el análisis.']];
+function buildStepper(){ $('stepper').innerHTML = STEPS.map((s,i) => `${i?`<span class="sline${i<=step?' on':''}"></span>`:''}<button class="sdot" type="button" data-go="${i}" data-state="${i<step?'done':i===step?'now':''}" ${i===step?'aria-current="step"':''}><span class="n">${i<step?ico('check'):i===0?ico('nucleo'):i}</span><span class="lbl">${s}</span></button>`).join(''); $$('#stepper [data-go]').forEach(b => b.onclick = () => go(+b.dataset.go)); }
+function updateNav(){ $('navBack').classList.toggle('hidden', step===0); $('navNextTxt').textContent = NAV[step][0]; $('navHint').textContent = NAV[step][1]; }
+function go(i){
+  step = i; $$('.screen').forEach(s => s.classList.toggle('on', +s.dataset.step === i)); $('progBar').style.width = (i/2*100)+'%';
+  buildStepper(); updateNav(); window.scrollTo({top:0, behavior:'instant'});
+  if(i === 1 && S.img) layout();
+  if(i === 1) renderLote();
+  if(i === 2){ renderLoteRes(); if(S.img){ renderSummary(); renderTable(); updatePayloadPreview(); } }
+}
+$('goHome').onclick = () => go(0);
+$('navBack').onclick = () => { if(step > 0) go(step-1); };
+$('navNext').onclick = () => { if(step === 0){ if(S.img) go(1); else $('file').click(); } else go(step === 2 ? 0 : step+1); };
+$('btnIA').onclick = () => { go(2); setTimeout(() => $('aiCard').scrollIntoView({behavior:'smooth', block:'start'}), 60); };
+const GLOS = [
+  ['¿Qué hace NucleIA?','Detecta los núcleos de una imagen de fluorescencia, separa los que se tocan y mide cada uno. Todo se calcula en tu navegador con un algoritmo determinista: con la misma imagen y los mismos parámetros, siempre el mismo resultado.'],
+  ['Calidad por núcleo','Cada núcleo recibe una puntuación entre 0 y 1 que combina tamaño relativo, circularidad, brillo, separación de sus vecinos y contraste con el entorno. Verde («bueno») desde 0,7; ámbar («dudoso») entre 0,5 y 0,7; rojo («revisar») por debajo de 0,5 o si supera el área máxima. Es una guía para decidir qué mirar primero, no una validación.'],
+  ['Revisar y corregir','«Quitar» elimina el núcleo pulsado; «Añadir» crea uno manual circular. Las correcciones se guardan por coordenadas, así que se reaplican si cambias los parámetros. «Deshacer» retira la última.'],
+  ['Marcadores','Un núcleo es positivo en un canal si su media en ese canal supera el umbral. Por defecto, los umbrales se calculan con Otsu sobre las medias de los núcleos; puedes fijarlos a mano.'],
+  ['Lote de imágenes','Abre varias imágenes a la vez (o añade más con «Añadir imágenes»). «Analizar todo el lote» aplica los mismos parámetros a todas, con sus correcciones propias, y en Resultados aparece la tabla comparativa con exportación a CSV y JSON. Si cambias un parámetro, las demás imágenes quedan marcadas como desactualizadas hasta que vuelvas a analizar. Los umbrales de marcadores automáticos se calculan imagen a imagen; si los fijas a mano, se usan los mismos en todas.'],
+  ['Escala','Con las micras por píxel, las áreas se dan también en µm² y se calcula la densidad en núcleos/mm². Sin escala, todo está en píxeles.'],
+  ['Asistente (opcional)','Solo recibe un resumen en JSON con los parámetros y las estadísticas, nunca la imagen, y puedes ver qué se envía antes de cada consulta. Sugiere ajustes y redacta texto; no cuenta núcleos. Tu clave la pagas tú y no sale de tu navegador.'],
+  ['Límites','El recuento depende de la calidad de la imagen y de los parámetros: revísalo siempre sobre la imagen. Núcleos muy apilados, fuera de foco o con fondo muy irregular pueden contarse mal. Los TIFF solo los abre Safari.']];
+$('glos').innerHTML = GLOS.map(g => `<div><b>${esc(g[0])}</b><span>${esc(g[1])}</span></div>`).join('');
+$('btnHelp').onclick = () => $('mHelp').classList.add('on');
+$$('.modal').forEach(m => m.addEventListener('click', ev => { if(ev.target === m || ev.target.hasAttribute('data-close')) m.classList.remove('on'); }));
+document.addEventListener('keydown', e => { if(e.key === 'Escape') $$('.modal.on').forEach(m => m.classList.remove('on')); });
+
+/* ---- Controles ---- */
+function buildSliders(){
+  const box = $('sliders'); box.innerHTML = '';
+  for(const d of SLIDERS){
+    const f = document.createElement('div'); f.className = 'fld'; f.dataset.k = d.k;
+    f.innerHTML = `<label for="s_${d.k}">${d.label}<output id="o_${d.k}"></output></label><input type="range" id="s_${d.k}" min="${d.min}" max="${d.max}" step="${d.step}">${d.hint?`<p class="hint">${d.hint}</p>`:''}`;
+    box.appendChild(f);
+    f.querySelector('input').addEventListener('input', e => { S.P[d.k] = +e.target.value; syncControls(); schedule(); });
+  }
+}
+function syncControls(){
+  $('channel').value = S.P.channel; $('autoThr').checked = S.P.autoThr;
+  for(const d of SLIDERS){
+    $('s_'+d.k).value = S.P[d.k]; $('o_'+d.k).textContent = S.P[d.k];
+    const f = document.querySelector(`.fld[data-k="${d.k}"]`);
+    if(d.auto) f.style.display = S.P.autoThr ? '' : 'none';
+    if(d.manual) f.style.display = S.P.autoThr ? 'none' : '';
+  }
+  try{ localStorage.setItem('nucleia_params', JSON.stringify(S.P)); }catch(e){}
+}
+$('channel').addEventListener('change', e => { S.P.channel = e.target.value; syncControls(); schedule(); });
+$('autoThr').addEventListener('change', e => { S.P.autoThr = e.target.checked; if(!e.target.checked && S.res) S.P.threshold = Math.round(S.res.thr); syncControls(); schedule(); });
+$('reset').addEventListener('click', () => { S.P = {...DEFAULTS}; syncControls(); schedule(); });
+$('umpx').addEventListener('input', () => { if(S.res){ renderSummary(); renderTable(); } });
+
+/* ---- Carga de imágenes y lote ---- */
+const isImg = f => /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|bmp|tiff?)$/i.test(f.name);
+const uid = () => Math.random().toString(36).slice(2, 8);
+['pick','pick0'].forEach(id => $(id).addEventListener('click', () => $('file').click()));
+['demo','demo0'].forEach(id => $(id).addEventListener('click', makeDemo));
+$('file').addEventListener('change', e => { openFiles([...e.target.files], true); e.target.value = ''; });
+$('fileAdd').addEventListener('change', e => { openFiles([...e.target.files], false); e.target.value = ''; });
+['dragenter','dragover'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('over'); }));
+['dragleave'].forEach(ev => document.addEventListener(ev, e => { if(!e.relatedTarget) $('drop').classList.remove('over'); }));
+document.addEventListener('drop', e => { e.preventDefault(); $('drop').classList.remove('over'); const fs = e.dataTransfer ? [...e.dataTransfer.files] : []; if(fs.length) openFiles(fs, !(step === 1 && S.lote.length)); });
+
+async function decodeFile(file){
+  const url = URL.createObjectURL(file);
+  try{
+    const im = new Image();
+    await new Promise((ok, no) => { im.onload = ok; im.onerror = () => no(new Error(`«${file.name}»: el navegador no puede abrir este formato. Exporta la imagen a PNG.`)); im.src = url; });
+    const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
+    const g = c.getContext('2d', {willReadFrequently:true}); g.drawImage(im, 0, 0);
+    return {imageData:g.getImageData(0, 0, c.width, c.height), canvas:c};
+  } finally { URL.revokeObjectURL(url); }
+}
+async function openFiles(files, reemplaza){
+  const imgs = files.filter(isImg);
+  if(!imgs.length){ toast('No hay imágenes en la selección'); return; }
+  if(reemplaza){ if(loteBusy) stopLote = true; S.lote = []; S.cur = -1; }
+  const nuevas = imgs.map(f => ({id:uid(), name:f.name, file:f, corr:[], sum:null, nucs:null, key:null, st:'pendiente'}));
+  const primera = S.cur < 0;
+  S.lote.push(...nuevas);
+  if(primera) await activate(S.lote.indexOf(nuevas[0]), true);
+  else { renderLote(); toast(`${nuevas.length} imagen${nuevas.length>1?'es':''} añadida${nuevas.length>1?'s':''} al lote`); }
+}
+async function activate(i, irA1){
+  const it = S.lote[i]; if(!it) return;
+  S.cur = i; setStatus('Leyendo imagen…');
+  try{
+    const d = it.mem || await decodeFile(it.file);
+    setImage(d.imageData, it.name, d.canvas, it, irA1);
+  }catch(err){ it.st = 'error'; it.err = err.message; setStatus(err.message); toast(err.message, 7000); renderLote(); }
+}
+function makeDemo(){
+  const w = 784, h = 498, rgba = new Uint8ClampedArray(w*h*4);
+  let seed = 7; const rnd = () => (seed = (seed*16807) % 2147483647) / 2147483647;
+  const ch = [new Float32Array(w*h), new Float32Array(w*h), new Float32Array(w*h)];
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=y*w+x; const t = Math.exp(-(((x-380)/330)**2+((y-250)/220)**2)); ch[1][i] = 18*t+rnd()*7; ch[2][i] = 8*t+rnd()*6; ch[0][i] = rnd()*4; }
+  for(let k=0;k<230;k++){
+    const cx = 60+rnd()*660, cy = 40+rnd()*420, rx = 5+rnd()*4, ry = rx*(0.75+rnd()*0.35), ang = rnd()*3.14;
+    const kind = Math.floor(rnd()*3), amp = 120+rnd()*135;
+    const w3 = kind===0 ? [0,0,1] : kind===1 ? [0,1,0.15] : [1,0.45,0];
+    for(let y=Math.floor(cy-14);y<=cy+14;y++) for(let x=Math.floor(cx-14);x<=cx+14;x++){
+      if(x<0||y<0||x>=w||y>=h) continue;
+      const dx=x-cx, dy=y-cy, u=(dx*Math.cos(ang)+dy*Math.sin(ang))/rx, v=(-dx*Math.sin(ang)+dy*Math.cos(ang))/ry;
+      const d = Math.sqrt(u*u+v*v), a = d<1 ? 1 : Math.exp(-(((d-1)*3)**2));
+      for(let c=0;c<3;c++) ch[c][y*w+x] += amp*a*w3[c];
+    }
+  }
+  for(let i=0;i<w*h;i++){ rgba[4*i]=Math.min(255,ch[0][i]); rgba[4*i+1]=Math.min(255,ch[1][i]); rgba[4*i+2]=Math.min(255,ch[2][i]); rgba[4*i+3]=255; }
+  const c = document.createElement('canvas'); c.width=w; c.height=h;
+  const g = c.getContext('2d'); const id = new ImageData(rgba, w, h); g.putImageData(id, 0, 0);
+  if(loteBusy) stopLote = true;
+  S.lote = [{id:uid(), name:'imagen_sintetica.png', mem:{imageData:id, canvas:c}, corr:[], sum:null, nucs:null, key:null, st:'pendiente'}]; S.cur = -1;
+  activate(0, true);
+}
+
+function setImage(imageData, name, canvas, item, irA1){
+  const {width:w, height:h, data} = imageData;
+  S.img = {rgba:data, w, h}; S.name = name; S.cache = null; S.corr = item.corr; S.selected = null; S.zoom = null;
+  S.srcCanvas = canvas;
+  $('drop').style.display='none'; $('wrap').style.display='block'; $('readout').style.display='flex';
+  $('res0').style.display='none'; $('resBody').style.display='block';
+  ['expJson','expCsv','expPng','aiSuggest','aiQc','aiReport'].forEach(id => $(id).disabled = false);
+  $('zoomOut').textContent='ajustado'; $('zoom').value = 1;
+  if(irA1 && step !== 1) go(1);
+  if(w*h > 8e6) setStatus('Imagen grande ('+(w*h/1e6).toFixed(1)+' Mpx): el análisis puede tardar unos segundos.');
+  renderLote();
+  runNow();
+}
+function vaciaVista(){
+  S.img = null; S.res = null; S.nuclei = []; S.cur = -1; S.name = '';
+  $('drop').style.display=''; $('wrap').style.display='none'; $('readout').style.display='none';
+  $('res0').style.display=''; $('resBody').style.display='none'; setStatus('');
+  ['expJson','expCsv','expPng','aiSuggest','aiQc','aiReport'].forEach(id => $(id).disabled = true);
+  renderLote();
+}
+
+/* ---- Lote: mismas condiciones para todas las imágenes ---- */
+let loteBusy = false, stopLote = false;
+const keyNow = () => JSON.stringify([S.P, S.pos.auto ? 'auto' : [S.pos.r, S.pos.g, S.pos.b]]);
+const isStale = it => it.st === 'ok' && it.key !== keyNow();
+const profileP = (o, pos) => (o.red_mean>pos.r?'R+':'R−') + (o.green_mean>pos.g?'G+':'G−') + (o.blue_mean>pos.b?'B+':'B−');
+function computeItem(it, nucs, w, h, res, pos){
+  it.w = w; it.h = h; it.pos = {...pos}; it.thr = res.thr; it.discarded = res.rejectedSmall;
+  it.sum = summaryOf(nucs, w, h, pos, null);
+  it.nucs = nucs.map(o => nucleusRecord(o, null, pos));
+  it.key = keyNow(); it.st = 'ok'; it.err = '';
+}
+const tick = () => new Promise(r => setTimeout(r, 12));
+function setLoteProg(t, p){ const el = $('loteProg'); if(el) el.innerHTML = t ? `<span class="spin"></span> ${esc(t)}` : ''; const b = $('loteBar'); if(b) b.style.width = (p||0)+'%'; }
+async function analizaLote(){
+  if(loteBusy || !S.lote.length) return;
+  loteBusy = true; stopLote = false; renderLote();
+  const N = S.lote.length;
+  for(let i = 0; i < N; i++){
+    if(stopLote) break;
+    const it = S.lote[i];
+    setLoteProg(`Analizando ${i+1} de ${N}: ${it.name}`, 100*i/N); await tick();
+    if(i === S.cur && S.res && S.img){ continue; }   // la imagen activa ya está analizada con estos parámetros
+    try{
+      const d = it.mem || await decodeFile(it.file);
+      const img = {rgba:d.imageData.data, w:d.imageData.width, h:d.imageData.height};
+      const res = Core.analyze(img, S.P, null);
+      const nucs = Core.applyCorrections(res, img, S.P, it.corr);
+      const pos = S.pos.auto ? {r:Core.autoPosThreshold(nucs,'red'), g:Core.autoPosThreshold(nucs,'green'), b:Core.autoPosThreshold(nucs,'blue')} : {r:S.pos.r, g:S.pos.g, b:S.pos.b};
+      computeItem(it, nucs, img.w, img.h, res, pos);
+    }catch(err){ it.st = 'error'; it.err = err.message; }
+    renderLote();
+  }
+  loteBusy = false; setLoteProg('', 0); renderLote(); renderLoteRes();
+  toast(stopLote ? 'Análisis del lote detenido' : 'Lote analizado con los mismos parámetros');
+}
+function renderLote(){
+  const n = S.lote.length, card = $('loteCard');
+  card.style.display = n ? '' : 'none';
+  if(!n) return;
+  const ok = S.lote.filter(it => it.st === 'ok' && !isStale(it)).length;
+  $('loteHead').textContent = n === 1 ? 'Imagen' : `Lote de ${n} imágenes`;
+  $('loteSub').textContent = n === 1 ? 'Puedes añadir más imágenes para analizarlas todas con los mismos parámetros.' : `${ok} de ${n} analizadas con los parámetros actuales. Pulsa una imagen para revisarla y corregirla.`;
+  $('loteList').innerHTML = S.lote.map((it, i) => {
+    const st = it.st === 'error' ? `<span class="nu-chip err" title="${esc(it.err)}">Error</span>` : it.st !== 'ok' ? '<span class="nu-chip">Sin analizar</span>' : isStale(it) ? `<span class="nu-chip warn">Desactualizada · ${it.sum.N}</span>` : `<span class="nu-chip ok">${it.sum.N} núcleos</span>`;
+    return `<div class="nu-it${i===S.cur?' on':''}" data-lote="${i}" role="button" tabindex="0" aria-label="Abrir ${esc(it.name)}"><span class="nu-n">${i+1}</span><b>${esc(it.name)}</b>${st}${it.corr.length?`<small>${it.corr.length} corr.</small>`:''}<button class="nu-x2" type="button" data-quita="${i}" aria-label="Quitar del lote">✕</button></div>`;
+  }).join('');
+  $('loteRun').disabled = loteBusy; $('loteRun').style.display = n > 1 ? '' : 'none'; $('loteStop').style.display = loteBusy ? '' : 'none';
+}
+$('loteList').addEventListener('click', e => {
+  const q = e.target.closest('[data-quita]');
+  if(q){ e.stopPropagation(); const i = +q.dataset.quita; S.lote.splice(i, 1); if(!S.lote.length){ vaciaVista(); return; } if(i === S.cur){ S.cur = -1; activate(Math.min(i, S.lote.length-1), false); } else { if(i < S.cur) S.cur--; renderLote(); } return; }
+  const r = e.target.closest('[data-lote]'); if(r && +r.dataset.lote !== S.cur) activate(+r.dataset.lote, false);
+});
+$('loteList').addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ const r = e.target.closest('[data-lote]'); if(r){ e.preventDefault(); r.click(); } } });
+$('loteRun').addEventListener('click', analizaLote);
+$('loteStop').addEventListener('click', () => { stopLote = true; });
+function renderLoteRes(){
+  const box = $('loteRes'); const done = S.lote.filter(it => it.sum);
+  if(S.lote.length < 2){ box.style.display = 'none'; return; }
+  box.style.display = '';
+  const um = +$('umpx').value || null;
+  const pend = S.lote.filter(it => it.st !== 'ok' || isStale(it)).length;
+  $('loteNota').innerHTML = pend ? `<div class="aviso"><b>${pend} imagen${pend>1?'es':''} sin analizar con los parámetros actuales.</b> <button class="btn btn-primary btn-sm" id="loteRun2" type="button" ${loteBusy?'disabled':''}>Analizar el lote ahora</button></div>` : '';
+  const rows = done.map(it => {
+    const s = it.sum, stale = isStale(it);
+    return `<tr class="nrow" data-lote="${S.lote.indexOf(it)}"><td>${esc(it.name)}${stale?' <span class="nu-chip warn">desactualizada</span>':''}</td><td><b>${s.N}</b></td><td>${s.cnt.bueno}</td><td>${s.cnt.dudoso}</td><td>${s.cnt.revisar}</td><td>${s.cnt.manual}</td><td>${fmt(s.mean,0)}${um?` · ${fmt(s.mean*um*um,1)} µm²`:''}</td>${um?`<td>${fmt(s.N/(it.w*it.h*um*um/1e6),0)}</td>`:''}</tr>`;
+  }).join('');
+  const counts = done.map(it => it.sum.N), tot = counts.reduce((a,b)=>a+b,0), m = counts.length ? tot/counts.length : 0;
+  const sd = counts.length > 1 ? Math.sqrt(counts.reduce((a,b)=>a+(b-m)**2,0)/(counts.length-1)) : 0;
+  $('loteTbl').innerHTML = `<tr><th>Imagen</th><th>Núcleos</th><th>Buenos</th><th>Dudosos</th><th>Revisar</th><th>Manuales</th><th>Área media (px)</th>${um?'<th>Densidad (núcleos/mm²)</th>':''}</tr>${rows}`;
+  $('loteStats').textContent = counts.length ? `${counts.length} imagen${counts.length>1?'es':''} · total ${tot} núcleos · media ${fmt(m,1)} ± ${fmt(sd,1)} por imagen` : 'Todavía no hay imágenes analizadas.';
+  ['expLoteCsv','expLoteNuc','expLoteJson'].forEach(id => $(id).disabled = !done.length);
+}
+document.addEventListener('click', e => { if(e.target.closest('#loteRun2')) analizaLote(); const r = e.target.closest('#loteTbl [data-lote]'); if(r){ activate(+r.dataset.lote, false).then(() => { renderLoteRes(); }); } });
+
+/* ---- Análisis ---- */
+let timer = null;
+function schedule(){ if(!S.img) return; clearTimeout(timer); setStatus('Calculando…'); timer = setTimeout(runNow, 220); }
+function runNow(){
+  if(!S.img) return;
+  setStatus('Calculando…');
+  setTimeout(() => {
+    const t0 = performance.now();
+    S.res = Core.analyze(S.img, S.P, S.cache); S.cache = S.res.cache;
+    buildViewCanvases();
+    afterCorrections();
+    setStatus(`${S.img.w}×${S.img.h} px · ${S.name} · análisis en ${Math.round(performance.now()-t0)} ms · umbral ${Math.round(S.res.thr)}${S.res.rejectedSmall? ' · '+S.res.rejectedSmall+' objetos descartados por área mínima':''}`);
+  }, 15);
+}
+function afterCorrections(){
+  S.nuclei = Core.applyCorrections(S.res, S.img, S.P, S.corr);
+  if(S.pos.auto){ ['r','g','b'].forEach(k => S.pos[k] = Core.autoPosThreshold(S.nuclei, {r:'red',g:'green',b:'blue'}[k])); }
+  syncPos();
+  const cur = S.lote[S.cur]; if(cur) computeItem(cur, S.nuclei, S.img.w, S.img.h, S.res, S.pos);
+  renderAll(); renderLote();
+}
+function renderAll(){ layout(); renderSummary(); renderTable(); updatePayloadPreview(); $('undo').disabled = !S.corr.length; }
+
+function buildViewCanvases(){
+  const {w,h} = S.img, n = w*h;
+  const mk = fn => { const c = document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); const id=g.createImageData(w,h); fn(id.data); g.putImageData(id,0,0); return c; };
+  S.chanCanvas = mk(d => { for(let i=0;i<n;i++){ const v = S.res.cache.norm[i]; d[4*i]=d[4*i+1]=d[4*i+2]=v; d[4*i+3]=255; } });
+  S.maskCanvas = mk(d => { for(let i=0;i<n;i++){ const v = S.res.mask[i] ? 255 : 0; d[4*i]=d[4*i+1]=d[4*i+2]=v; d[4*i+3]=255; } });
+}
+
+/* ---- Dibujo ---- */
+function scale(){
+  if(S.zoom) return S.zoom;
+  const avail = $('stage').clientWidth - 2;
+  return Math.max(0.2, Math.min(avail / S.img.w, 3));
+}
+function layout(){
+  if(!S.img || !S.srcCanvas) return;
+  const s = scale(), W = Math.round(S.img.w*s), H = Math.round(S.img.h*s);
+  const cb = $('cBase'), co = $('cOver');
+  cb.width = co.width = W; cb.height = co.height = H;
+  $('wrap').style.width = W+'px'; $('wrap').style.height = H+'px';
+  const g = cb.getContext('2d'); g.imageSmoothingEnabled = s < 1;
+  g.drawImage(S.view==='orig' ? S.srcCanvas : S.view==='chan' ? S.chanCanvas : S.maskCanvas, 0, 0, W, H);
+  drawOverlay();
+}
+function visibleNuclei(){ return S.nuclei.filter(o => S.vis[o.manual ? 'manual' : o.cls]); }
+function paintOverlay(g, s, withIds, W, H){
+  const {w,h} = S.img;
+  if($('showOut').checked){
+    const oc = document.createElement('canvas'); oc.width=w; oc.height=h;
+    const og = oc.getContext('2d'); const id = og.createImageData(w,h); const d = id.data;
+    for(const o of visibleNuclei()){
+      const col = hex(o.manual ? COL.manual : COL[o.cls]);
+      for(const i of o.edgePix){ d[4*i]=col[0]; d[4*i+1]=col[1]; d[4*i+2]=col[2]; d[4*i+3]=255; }
+    }
+    og.putImageData(id,0,0);
+    g.imageSmoothingEnabled = s < 1; g.drawImage(oc, 0, 0, W, H);
+  }
+  if(withIds && $('showIds').checked && s >= 1.2){
+    g.font = `600 ${Math.max(9, Math.min(14, 7*s))}px system-ui, sans-serif`; g.textAlign='center'; g.textBaseline='middle';
+    for(const o of visibleNuclei()){
+      g.lineWidth = 3; g.strokeStyle='rgba(5,8,20,.85)'; g.fillStyle='#fff';
+      g.strokeText(o.id, o.x*s, (o.y - o.radius - 3)*s); g.fillText(o.id, o.x*s, (o.y - o.radius - 3)*s);
+    }
+  }
+  const sel = S.nuclei.find(o => o.id === S.selected);
+  if(sel){ g.lineWidth = 2; g.strokeStyle='#fff'; g.beginPath(); g.arc(sel.x*s, sel.y*s, (sel.radius+4)*s, 0, 6.2832); g.stroke(); }
+}
+function drawOverlay(){
+  const co = $('cOver'), g = co.getContext('2d'); g.clearRect(0,0,co.width,co.height);
+  paintOverlay(g, scale(), true, co.width, co.height);
+}
+function hex(h){ return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }
+
+$('showIds').addEventListener('change', drawOverlay);
+$('showOut').addEventListener('change', drawOverlay);
+$('zoom').addEventListener('input', e => { S.zoom = +e.target.value; $('zoomOut').textContent = Math.round(S.zoom*100)+'%'; layout(); });
+$('fit').addEventListener('click', () => { S.zoom = null; $('zoom').value = 1; $('zoomOut').textContent='ajustado'; layout(); });
+window.addEventListener('resize', () => { if(S.img && !S.zoom && step === 1) layout(); });
+$('segView').addEventListener('click', e => { const b = e.target.closest('button'); if(!b) return; S.view = b.dataset.v; [...$('segView').children].forEach(x => x.setAttribute('aria-pressed', x===b)); layout(); });
+$('segTool').addEventListener('click', e => { const b = e.target.closest('button'); if(!b) return; S.tool = b.dataset.t; [...$('segTool').children].forEach(x => x.setAttribute('aria-pressed', x===b)); $('cOver').style.cursor = S.tool==='select' ? 'pointer' : 'crosshair'; });
+$('chips').addEventListener('click', e => { const b = e.target.closest('.chip'); if(!b) return; const c = b.dataset.c; S.vis[c] = !S.vis[c]; b.setAttribute('aria-pressed', S.vis[c]); drawOverlay(); renderTable(); });
+
+/* ---- Clic sobre la imagen ---- */
+$('cOver').addEventListener('click', e => {
+  if(!S.res) return;
+  const r = e.target.getBoundingClientRect(), s = scale();
+  const x = (e.clientX - r.left)/s, y = (e.clientY - r.top)/s;
+  const hit = findAt(x, y);
+  if(S.tool === 'select'){ S.selected = hit ? hit.id : null; drawOverlay(); renderTable(true); }
+  else if(S.tool === 'delete'){ if(hit){ S.corr.push({action:'delete', x:+hit.x, y:+hit.y}); S.selected = null; afterCorrections(); } }
+  else if(S.tool === 'add'){ if(!hit){ S.corr.push({action:'add', x:Math.round(x), y:Math.round(y)}); afterCorrections(); } }
+});
+function findAt(x, y){
+  const xi = Math.round(x), yi = Math.round(y), {w,h} = S.img;
+  for(const o of S.nuclei) if(o.manual && Math.hypot(o.x-x, o.y-y) <= o.radius+1) return o;
+  if(xi>=0 && yi>=0 && xi<w && yi<h){ const l = S.res.lab[yi*w+xi]; const o = S.nuclei.find(n => n.label === l); if(o) return o; }
+  return Core.nearest(S.nuclei, x, y);
+}
+$('undo').addEventListener('click', () => { S.corr.pop(); afterCorrections(); });
+
+/* ---- Marcadores ---- */
+function syncPos(){
+  ['r','g','b'].forEach(k => { $('th'+k.toUpperCase()).value = S.pos[k]; $('t'+k.toUpperCase()).textContent = Math.round(S.pos[k]); });
+  $('posAuto').checked = S.pos.auto;
+}
+['R','G','B'].forEach(k => $('th'+k).addEventListener('input', e => { S.pos.auto = false; S.pos[k.toLowerCase()] = +e.target.value; syncPos(); renderSummary(); renderTable(); updatePayloadPreview(); }));
+$('posAuto').addEventListener('change', e => { S.pos.auto = e.target.checked; if(S.pos.auto) afterCorrections(); });
+function profile(o){ return profileP(o, S.pos); }
+
+/* ---- Resumen y tabla ---- */
+function fmt(v, d=1){ return Number.isFinite(v) ? v.toFixed(d) : '–'; }
+function summary(){ return summaryOf(S.nuclei, S.img.w, S.img.h, S.pos, +$('umpx').value || null); }
+function summaryOf(n, W, H, th, um){
+  const a = n.map(o => o.area), N = n.length;
+  const mean = N ? a.reduce((s,v)=>s+v,0)/N : 0;
+  const sd = N>1 ? Math.sqrt(a.reduce((s,v)=>s+(v-mean)**2,0)/(N-1)) : 0;
+  const cnt = {bueno:0,dudoso:0,revisar:0,manual:0}; n.forEach(o => cnt[o.manual?'manual':o.cls]++);
+  const pos = {R:0,G:0,B:0}, combos = {};
+  n.forEach(o => { const p = profileP(o, th); if(p.includes('R+')) pos.R++; if(p.includes('G+')) pos.G++; if(p.includes('B+')) pos.B++; combos[p] = (combos[p]||0)+1; });
+  return {N, mean, sd, median:Core.median(a), cnt, pos, combos, um,
+    density: um ? N / (W*H*um*um/1e6) : null};
+}
+function renderSummary(){
+  if(!S.img || !S.nuclei) return;
+  const m = summary();
+  $('nCount').textContent = m.N; $('nLabel').textContent = m.N===1 ? 'núcleo' : 'núcleos';
+  $('cGood').textContent = m.cnt.bueno; $('cDub').textContent = m.cnt.dudoso; $('cRev').textContent = m.cnt.revisar; $('cMan').textContent = m.cnt.manual;
+  const st = [['Área media', fmt(m.mean,0)+' px'+(m.um?` · ${fmt(m.mean*m.um*m.um,1)} µm²`:'')], ['Mediana', fmt(m.median,0)+' px'], ['Desv. típica', fmt(m.sd,0)+' px']];
+  if(m.density!=null) st.push(['Densidad', fmt(m.density,0)+' núcleos/mm²']);
+  $('stats').innerHTML = st.map(([k,v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
+  const arr = Object.entries(m.combos).sort((a,b)=>b[1]-a[1]);
+  $('combos').innerHTML = `<span><b>${m.pos.R}</b> R+</span><span><b>${m.pos.G}</b> G+</span><span><b>${m.pos.B}</b> B+</span>` + arr.map(([k,v]) => `<span>${k.replace(/−/g,'<sup>−</sup>')}: <b>${v}</b></span>`).join('');
+}
+function renderTable(keepScroll){
+  if(!S.img) return;
+  const um = +$('umpx').value || null;
+  const rows = S.nuclei.filter(o => S.vis[o.manual?'manual':o.cls]);
+  const lim = 400;
+  let h = `<tr><th>ID</th><th>x</th><th>y</th><th>Área px</th>${um?'<th>Área µm²</th>':''}<th>Circ.</th><th>Calidad</th><th>R</th><th>G</th><th>B</th><th>Perfil</th></tr>`;
+  for(const o of rows.slice(0, lim)){
+    const c = o.manual ? COL.manual : COL[o.cls];
+    h += `<tr class="nrow${o.id===S.selected?' sel':''}" data-id="${o.id}"><td><span class="dotc" style="background:${c}"></span>${o.id}</td><td>${fmt(o.x)}</td><td>${fmt(o.y)}</td><td>${o.area}</td>${um?`<td>${fmt(o.area*um*um,1)}</td>`:''}<td>${o.manual?'–':fmt(o.circularity,2)}</td><td>${o.manual?'manual':fmt(o.quality,2)}</td><td>${fmt(o.red_mean,0)}</td><td>${fmt(o.green_mean,0)}</td><td>${fmt(o.blue_mean,0)}</td><td>${profile(o)}</td></tr>`;
+  }
+  $('tbl').innerHTML = h;
+  $('tblNote').textContent = rows.length > lim ? `(se muestran ${lim} de ${rows.length}; la exportación incluye todos)` : '';
+  if(keepScroll){ const r = $('tbl').querySelector('tr.sel'); if(r) r.scrollIntoView({block:'nearest'}); }
+}
+$('tbl').addEventListener('click', e => { const r = e.target.closest('tr.nrow'); if(!r) return; S.selected = +r.dataset.id; drawOverlay(); renderTable(); });
+function setStatus(t){ $('status').textContent = t; }
+
+/* ---- Exportación ---- */
+function download(name, text, type){ const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000); }
+const baseName = () => (S.name||'imagen').replace(/\.[^.]+$/,'');
+function nucleusRecord(o, um, pos){
+  const rec = {id:o.id, x:o.x, y:o.y, area_px:o.area, radius_px:o.radius, bbox:o.bbox, circularity:o.circularity,
+    mean_intensity:o.mean_intensity, max_intensity:o.max_intensity, red_mean:o.red_mean, green_mean:o.green_mean, blue_mean:o.blue_mean,
+    profile:profileP(o, pos || S.pos), quality:o.quality, class:o.manual?'manual':o.cls, quality_parts:o.parts, manual:o.manual};
+  if(um) rec.area_um2 = +(o.area*um*um).toFixed(2);
+  return rec;
+}
+$('expJson').addEventListener('click', () => {
+  const m = summary(), um = m.um;
+  const out = {software:'NucleIA 1.0.0', authors:['Augusto Escalante Rodríguez (ORCID 0000-0003-4955-6213)','Fernando Borrás Rocher (ORCID 0000-0002-5519-4573)'], created:new Date().toISOString(),
+    image:{name:S.name, width:S.img.w, height:S.img.h, um_per_px:um},
+    analysis:{method:'deterministic_cv', pipeline:['canal','corrección de fondo (mínimo local suavizado)','gaussiana','Otsu + desplazamiento','apertura morfológica','transformada de distancia','semillas por máximos locales','watershed','filtrado por área'],
+      parameters:{...S.P, threshold_used:S.res.thr, otsu_threshold:S.res.autoThr}, positivity_thresholds:{red:S.pos.r, green:S.pos.g, blue:S.pos.b, automatic:S.pos.auto}},
+    corrections:S.corr, summary:{count:m.N, mean_area_px:+m.mean.toFixed(1), median_area_px:m.median, sd_area_px:+m.sd.toFixed(1), classes:m.cnt, positive:m.pos, profiles:m.combos, density_per_mm2:m.density, discarded_below_min_area:S.res.rejectedSmall},
+    nuclei:S.nuclei.map(o => nucleusRecord(o, um))};
+  download(baseName()+'_nucleia.json', JSON.stringify(out, null, 1), 'application/json');
+});
+$('expCsv').addEventListener('click', () => {
+  const um = +$('umpx').value || null;
+  const head = ['id','x','y','area_px'].concat(um?['area_um2']:[], ['circularity','quality','class','mean_intensity','max_intensity','red_mean','green_mean','blue_mean','profile','manual']);
+  const lines = [head.join(',')];
+  for(const o of S.nuclei) lines.push([o.id,o.x,o.y,o.area].concat(um?[(o.area*um*um).toFixed(2)]:[], [o.circularity,o.quality,o.manual?'manual':o.cls,o.mean_intensity,o.max_intensity,o.red_mean,o.green_mean,o.blue_mean,profile(o).replace(/−/g,'-'),o.manual]).join(','));
+  download(baseName()+'_nucleia.csv', '\ufeff'+lines.join('\n'), 'text/csv');
+});
+$('expPng').addEventListener('click', () => {
+  const {w,h} = S.img, k = 2, c = document.createElement('canvas'); c.width = w*k; c.height = h*k;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(S.srcCanvas, 0, 0, w*k, h*k);
+  paintOverlay(g, k, true, w*k, h*k);
+  c.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = baseName()+'_nucleia.png'; document.body.appendChild(a); a.click(); a.remove(); });
+});
+
+
+/* ---- Exportación del lote ---- */
+const csvq = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s; };
+const doneItems = () => S.lote.filter(it => it.sum);
+$('expLoteCsv').addEventListener('click', () => {
+  const um = +$('umpx').value || null, L = doneItems();
+  const head = ['imagen','estado','nucleos','buenos','dudosos','revisar','manuales','area_media_px','area_mediana_px','area_sd_px'].concat(um?['area_media_um2','densidad_por_mm2']:[], ['R_pos','G_pos','B_pos','umbral_R','umbral_G','umbral_B','correcciones_quitar','correcciones_anadir','ancho_px','alto_px']);
+  const rows = L.map(it => { const s = it.sum; return [it.name, isStale(it)?'desactualizada':'ok', s.N, s.cnt.bueno, s.cnt.dudoso, s.cnt.revisar, s.cnt.manual, +s.mean.toFixed(1), s.median, +s.sd.toFixed(1)].concat(um?[+(s.mean*um*um).toFixed(2), +(s.N/(it.w*it.h*um*um/1e6)).toFixed(1)]:[], [s.pos.R, s.pos.G, s.pos.B, Math.round(it.pos.r), Math.round(it.pos.g), Math.round(it.pos.b), it.corr.filter(c=>c.action==='delete').length, it.corr.filter(c=>c.action==='add').length, it.w, it.h]).map(csvq).join(','); });
+  download('lote_nucleia_resumen.csv', '\ufeff' + [head.join(','), ...rows].join('\n'), 'text/csv');
+});
+$('expLoteNuc').addEventListener('click', () => {
+  const um = +$('umpx').value || null, L = doneItems();
+  const head = ['imagen','id','x','y','area_px'].concat(um?['area_um2']:[], ['circularity','quality','class','mean_intensity','max_intensity','red_mean','green_mean','blue_mean','profile','manual']);
+  const lines = [head.join(',')];
+  for(const it of L) for(const r of it.nucs) lines.push([it.name, r.id, r.x, r.y, r.area_px].concat(um?[(r.area_px*um*um).toFixed(2)]:[], [r.circularity, r.quality, r.class, r.mean_intensity, r.max_intensity, r.red_mean, r.green_mean, r.blue_mean, r.profile.replace(/−/g,'-'), r.manual]).map(csvq).join(','));
+  download('lote_nucleia_nucleos.csv', '\ufeff' + lines.join('\n'), 'text/csv');
+});
+$('expLoteJson').addEventListener('click', () => {
+  const um = +$('umpx').value || null;
+  const out = {software:'NucleIA 1.0.0', authors:['Augusto Escalante Rodríguez (ORCID 0000-0003-4955-6213)','Fernando Borrás Rocher (ORCID 0000-0002-5519-4573)'], created:new Date().toISOString(),
+    analysis:{method:'deterministic_cv', parameters:{...S.P}, positivity_thresholds:{automatic:S.pos.auto, red:S.pos.r, green:S.pos.g, blue:S.pos.b}, um_per_px:um},
+    images:doneItems().map(it => ({name:it.name, width:it.w, height:it.h, stale:isStale(it), threshold_used:it.thr, positivity_thresholds:{red:it.pos.r, green:it.pos.g, blue:it.pos.b}, corrections:it.corr,
+      summary:{count:it.sum.N, mean_area_px:+it.sum.mean.toFixed(1), median_area_px:it.sum.median, sd_area_px:+it.sum.sd.toFixed(1), classes:it.sum.cnt, positive:it.sum.pos, profiles:it.sum.combos, density_per_mm2:um ? it.sum.N/(it.w*it.h*um*um/1e6) : null, discarded_below_min_area:it.discarded},
+      nuclei:it.nucs.map(r => um ? {...r, area_um2:+(r.area_px*um*um).toFixed(2)} : r)}))};
+  download('lote_nucleia.json', JSON.stringify(out, null, 1), 'application/json');
+});
+
+/* ---- Asistente OpenAI: solo recibe JSON ---- */
+const keyBox = $('apiKey');
+(function(){ try{ const k = localStorage.getItem('ia_openai_key'); if(k){ keyBox.value = k; $('remember').checked = true; } }catch(e){} })();
+keyBox.addEventListener('input', persistKey); $('remember').addEventListener('change', persistKey);
+function persistKey(){ try{ if($('remember').checked && keyBox.value) localStorage.setItem('ia_openai_key', keyBox.value); else localStorage.removeItem('ia_openai_key'); }catch(e){} }
+$('inclTable').addEventListener('change', updatePayloadPreview);
+
+function buildPayload(){
+  const m = summary(), a = S.nuclei.map(o => o.area);
+  const mn = Math.min(...a), mx = Math.max(...a), bins = 10, hist = new Array(bins).fill(0);
+  a.forEach(v => hist[Math.min(bins-1, Math.floor((v-mn)/Math.max(1,(mx-mn+1))*bins))]++);
+  const p = {
+    imagen:{ancho_px:S.img.w, alto_px:S.img.h, micras_por_pixel:m.um},
+    metodo:{tipo:'visión por computador determinista (umbral de Otsu + watershed)', parametros:{...S.P}, umbral_aplicado:Math.round(S.res.thr), umbral_otsu:S.res.autoThr},
+    resumen:{n_nucleos:m.N, area_media_px:+m.mean.toFixed(1), area_mediana_px:m.median, desviacion_area_px:+m.sd.toFixed(1), clases_calidad:m.cnt,
+      descartados_por_area_minima:S.res.rejectedSmall, positivos:m.pos, perfiles:m.combos, umbrales_positividad:{R:S.pos.r,G:S.pos.g,B:S.pos.b}, densidad_por_mm2:m.density},
+    histograma_areas_px:{min:mn, max:mx, cubos:hist},
+    correcciones_manuales:{eliminados:S.corr.filter(c=>c.action==='delete').length, anadidos:S.corr.filter(c=>c.action==='add').length}
+  };
+  if($('inclTable').checked) p.nucleos = S.nuclei.slice(0,150).map(o => [o.id, Math.round(o.x), Math.round(o.y), o.area, o.circularity, o.quality, profile(o)]);
+  if(p.nucleos) p.columnas_nucleos = ['id','x','y','area_px','circularidad','calidad','perfil'];
+  return p;
+}
+function updatePayloadPreview(){ if(!S.img || !S.nuclei.length){ $('payloadPrev').textContent = S.img ? 'No hay núcleos todavía.' : 'Carga una imagen para ver el resumen.'; return; } $('payloadPrev').textContent = JSON.stringify(buildPayload(), null, 1); }
+
+const SYS = 'Eres un asistente de análisis cuantitativo de microscopía de fluorescencia. No ves la imagen: solo recibes un resumen JSON con parámetros y métricas de un recuento de núcleos hecho por un algoritmo determinista. No sustituyes ese recuento ni lo corriges numéricamente. No inventes datos que no estén en el JSON. Responde en español, de forma concisa y prudente.';
+const PROMPTS = {
+  suggest: 'Revisa el resumen y propón ajustes de parámetros solo si hay indicios en los datos (por ejemplo, muchos objetos dudosos, áreas muy dispersas, muchos descartes por área mínima o objetos pegados). Responde SOLO con JSON con esta forma: {"parametros":{"clave":valor},"motivos":["..."],"alertas":["..."]}. Claves permitidas y rangos: thrOffset (-60 a 60), blur (0 a 3), bgRadius (0 a 40), open (0 a 3), minDist (2 a 20), splitSmooth (0 a 3), minArea (5 a 400), maxArea (50 a 5000). Incluye solo las claves que quieras cambiar.',
+  qc: 'Haz un control de calidad del recuento: qué señales de los datos indican posibles falsos positivos, núcleos fusionados o núcleos perdidos, y qué debería revisar la persona sobre la imagen. Usa una lista corta.',
+  report: 'Redacta en prosa científica un párrafo de Métodos y otro de Resultados para este recuento, con los parámetros exactos y las estadísticas del JSON. Si falta un dato necesario (aumento, tinción, tamaño de píxel), déjalo entre corchetes para que la persona lo complete. Termina con una frase de limitaciones.'
+};
+async function askAI(kind){
+  const key = keyBox.value.trim();
+  if(!key){ $('aiOut').textContent = 'Introduce tu clave de API de OpenAI.'; return; }
+  const payload = JSON.stringify(buildPayload());
+  $('aiOut').textContent = 'Consultando…'; $('aiApply').style.display = 'none'; S.aiSuggestion = null;
+  const body = {model:$('model').value.trim() || 'gpt-4o-mini', messages:[{role:'system', content:SYS}, {role:'user', content:PROMPTS[kind] + '\n\nDATOS:\n' + payload}]};
+  if(kind === 'suggest') body.response_format = {type:'json_object'};
+  try{
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {method:'POST', headers:{'Content-Type':'application/json', 'Authorization':'Bearer '+key}, body:JSON.stringify(body)});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error && j.error.message ? j.error.message : 'Error '+r.status);
+    S.aiSent.calls++; S.aiSent.bytes += payload.length;
+    $('ledger').classList.add('sent');
+    $('ledgerTxt').textContent = `Enviado a OpenAI: ${S.aiSent.calls} resumen${S.aiSent.calls>1?'es':''} JSON (${(S.aiSent.bytes/1024).toFixed(1)} KB) · 0 imágenes`;
+    const text = j.choices[0].message.content || '';
+    if(kind === 'suggest') showSuggestion(text); else $('aiOut').textContent = text;
+  }catch(err){ $('aiOut').textContent = 'No se pudo completar la consulta: ' + err.message; }
+}
+function showSuggestion(text){
+  let o; try{ o = JSON.parse(text); }catch(e){ $('aiOut').textContent = text; return; }
+  const ranges = {thrOffset:[-60,60], blur:[0,3], bgRadius:[0,40], open:[0,3], minDist:[2,20], splitSmooth:[0,3], minArea:[5,400], maxArea:[50,5000]};
+  const ok = {};
+  for(const [k,v] of Object.entries(o.parametros||{})) if(ranges[k] && Number.isFinite(+v)) ok[k] = Math.min(ranges[k][1], Math.max(ranges[k][0], +v));
+  S.aiSuggestion = ok;
+  const lines = [];
+  lines.push(Object.keys(ok).length ? 'Cambios propuestos:\n' + Object.entries(ok).map(([k,v]) => `  ${k}: ${S.P[k]} → ${v}`).join('\n') : 'No propone cambios de parámetros.');
+  if((o.motivos||[]).length) lines.push('\nMotivos:\n' + o.motivos.map(t => '  · ' + t).join('\n'));
+  if((o.alertas||[]).length) lines.push('\nAlertas:\n' + o.alertas.map(t => '  · ' + t).join('\n'));
+  $('aiOut').textContent = lines.join('\n');
+  if(Object.keys(ok).length) $('aiApply').style.display = '';
+}
+$('aiApply').addEventListener('click', () => { if(!S.aiSuggestion) return; Object.assign(S.P, S.aiSuggestion); syncControls(); $('aiApply').style.display='none'; runNow(); });
+$('aiSuggest').addEventListener('click', () => askAI('suggest'));
+$('aiQc').addEventListener('click', () => askAI('qc'));
+$('aiReport').addEventListener('click', () => askAI('report'));
+
+buildSliders(); syncControls(); renderLote(); go(0);
+</script>
+</body></html>
