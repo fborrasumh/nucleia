@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "Si usas este software, cítalo con estos metadatos."
+title: "NucleIA"
+type: software
+authors:
+  - family-names: "Escalante Rodríguez"
+    given-names: "Augusto"
+    affiliation: "Instituto de Neurociencias (CSIC-Universidad Miguel Hernández)"
+    orcid: "https://orcid.org/0000-0003-4955-6213"
+  - family-names: "Borrás Rocher"
+    given-names: "Fernando"
+    affiliation: "Universidad Miguel Hernández de Elche"
+    orcid: "https://orcid.org/0000-0002-5519-4573"
+doi: "10.5281/zenodo.23104057"
+version: "1.0.0"
+date-released: "2026-10-02"
+url: "https://fborrasumh.github.io/nucleia/"
+repository-code: "https://github.com/fborrasumh/nucleia"
+license: MIT
