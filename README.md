@@ -1,5 +1,7 @@
 # NucleIA
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23104057.svg)](https://doi.org/10.5281/zenodo.23104057)
+
 Aplicación web de un solo fichero para **contar núcleos en imágenes de microscopía de fluorescencia**, una a una o en lote. La imagen se procesa en el navegador y no se envía a ningún servidor.
 
 **Usar la app:** https://fborrasumh.github.io/nucleia/
@@ -31,7 +33,7 @@ Idea original de **Augusto Escalante Rodríguez** (Instituto de Neurociencias, C
 
 ## Cómo citar
 
-Escalante Rodríguez, A. y Borrás Rocher, F. (2026). *NucleIA* (v1.0.0) [Software]. (DOI en trámite)
+Escalante Rodríguez, A. y Borrás Rocher, F. (2026). *NucleIA* (v1.0.0) [Software]. DOI: [10.5281/zenodo.23104057](https://doi.org/10.5281/zenodo.23104057)
 
 ## Licencia
 
